@@ -8,6 +8,7 @@ import WorkInbox from '../components/WorkInbox.jsx'
 import WorkList from '../components/WorkList.jsx'
 import WatsonSuggestions from '../components/WatsonSuggestions.jsx'
 import { moveBoardCard } from '../boardOrder.js'
+import { syncMonitor, useCacheRefresh, useSyncStatus } from '../useSyncRefresh.js'
 
 const EMPTY_WORK = { items: [] }
 
@@ -63,9 +64,9 @@ export default function MyWork() {
   const [meetings, setMeetings] = useState([])
   const [scheduleLoading, setScheduleLoading] = useState(true)
   const [scheduleError, setScheduleError] = useState('')
-  const [health, setHealth] = useState([])
-  const [healthLoading, setHealthLoading] = useState(true)
-  const [healthError, setHealthError] = useState('')
+  const { status, error: healthError } = useSyncStatus()
+  const health = status?.sources || []
+  const healthLoading = !status && !healthError
   const [inbox, setInbox] = useState([])
   const [inboxError, setInboxError] = useState('')
   const [suggestions, setSuggestions] = useState([])
@@ -78,40 +79,33 @@ export default function MyWork() {
   const [mutationError, setMutationError] = useState('')
 
   const loadWork = useCallback((signal) => api.myWork({ signal }).then((data) => {
+    if (signal.aborted) return
     setWork({ ...EMPTY_WORK, ...data }); setWorkError('')
   }).catch((err) => { if (err.name !== 'AbortError') setWorkError('Could not load work. Try refreshing.') }).finally(() => { if (!signal.aborted) setWorkLoading(false) }), [])
   const loadInbox = useCallback((signal) => api.workInbox({ signal }).then((data) => {
+    if (signal.aborted) return
     setInbox(data.inbox || []); setInboxError('')
   }).catch((err) => { if (err.name !== 'AbortError') setInboxError('Inbox is temporarily unavailable.') }), [])
   const loadSuggestions = useCallback((signal) => api.reviewSuggestions({ signal }).then((data) => {
+    if (signal.aborted) return
     setSuggestions(data.suggestions || []); setSuggestionsError('')
   }).catch((err) => { if (err.name !== 'AbortError') setSuggestionsError('Review suggestions are temporarily unavailable.') }), [])
   const loadCalendar = useCallback((signal) => api.today({ signal }).then((data) => {
+    if (signal.aborted) return
     setMeetings(data.meetings || []); setScheduleError('')
   }).catch((err) => {
     if (err.name !== 'AbortError') setScheduleError('Schedule is temporarily unavailable.')
   }).finally(() => { if (!signal.aborted) setScheduleLoading(false) }), [])
-  const loadHealth = useCallback((signal) => api.syncStatus({ signal }).then((data) => {
-    setHealth(data.sources || []); setHealthError('')
-  }).catch((err) => {
-    if (err.name !== 'AbortError') setHealthError('Health details are temporarily unavailable.')
-  }).finally(() => { if (!signal.aborted) setHealthLoading(false) }), [])
+  const refresh = useCallback(signal => {
+    loadWork(signal); loadInbox(signal); loadCalendar(signal); loadSuggestions(signal)
+  }, [loadWork, loadInbox, loadCalendar, loadSuggestions])
+  useCacheRefresh(refresh)
 
   useEffect(() => {
-    const controller = new AbortController()
-    const refreshWork = () => {
-      if (document.visibilityState !== 'hidden') {
-        loadWork(controller.signal); loadSuggestions(controller.signal)
-      }
-    }
-    refreshWork(); loadInbox(controller.signal); loadCalendar(controller.signal); loadHealth(controller.signal)
-    const interval = window.setInterval(refreshWork, 90_000)
-    const onVisibility = () => { if (document.visibilityState === 'visible') refreshWork() }
     const onAdd = () => { setAddMode('local'); setShowAdd(true) }
-    document.addEventListener('visibilitychange', onVisibility)
     window.addEventListener('watson:add-work', onAdd)
-    return () => { controller.abort(); window.clearInterval(interval); document.removeEventListener('visibilitychange', onVisibility); window.removeEventListener('watson:add-work', onAdd) }
-  }, [loadWork, loadInbox, loadCalendar, loadHealth, loadSuggestions])
+    return () => window.removeEventListener('watson:add-work', onAdd)
+  }, [])
 
   const moveCard = async (itemId, requestedState, beforeId, afterId) => {
     const previous = work
@@ -120,8 +114,10 @@ export default function MyWork() {
     setMutationError('')
     try { setWork(moveBoardCard({ ...work, mode: 'flat' }, itemId, item.state, beforeId, afterId)) }
     catch (err) { setMutationError(err.message); return }
+    const release = syncMonitor.hold()
     try { await api.moveWork(itemId, { state: item.state, before_id: beforeId ?? null, after_id: afterId ?? null }) }
     catch (err) { setWork(previous); setMutationError(`Could not move work. ${err.message}`) }
+    finally { release() }
   }
   const addWork = async (event) => {
     event.preventDefault()
@@ -129,6 +125,7 @@ export default function MyWork() {
     if (!value || addBusy) return
     setMutationError('')
     setAddBusy(true)
+    const release = syncMonitor.hold()
     try {
       if (addMode === 'local') {
         const response = await api.createWork({ title: value, state: 'next' })
@@ -144,20 +141,16 @@ export default function MyWork() {
       }
     } catch {
       setMutationError(addMode === 'local' ? 'Could not add local work. Please try again.' : 'Could not import this link. Check the URL and integration in Settings, then try again.')
-    } finally { setAddBusy(false) }
+    } finally { setAddBusy(false); release() }
   }
   const refreshInbox = (id) => setInbox((items) => items.filter((item) => item.id !== id))
   const refreshAfterCapture = () => {
-    const controller = new AbortController()
-    loadInbox(controller.signal)
+    syncMonitor.refresh()
   }
-  const refreshSuggestions = async () => {
-    const controller = new AbortController()
-    await Promise.all([loadSuggestions(controller.signal), loadWork(controller.signal)])
-  }
+  const refreshSuggestions = () => syncMonitor.refresh()
   const retryHealth = async (source) => {
     await api.retrySync(source)
-    await loadHealth(new AbortController().signal)
+    syncMonitor.check(); syncMonitor.refresh()
   }
 
   return <div className="my-work-page">
@@ -173,7 +166,8 @@ export default function MyWork() {
       <button type="submit" disabled={addBusy || !(addMode === 'local' ? newTitle.trim() : importUrl.trim())}>{addBusy ? (addMode === 'local' ? 'Adding…' : 'Importing…') : (addMode === 'local' ? 'Add' : 'Import')}</button><button type="button" className="quiet" disabled={addBusy} onClick={() => setShowAdd(false)}>Cancel</button>
     </form>}
     {mutationError && <p className="work-inline-error" role="alert">{mutationError}</p>}
-    {workLoading ? <p className="work-loading">Loading your work…</p> : workError ? <p className="work-inline-error" role="alert">{workError}</p> : <div className="my-work-grid flat-board">
+    {workError && <p className="work-inline-error" role="alert">{workError}</p>}
+    {workLoading ? <p className="work-loading">Loading your work…</p> : <div className="my-work-grid flat-board">
       <div className="my-work-main-column">
         <WorkList title="Priority" items={work.items} onMove={moveCard} onOpen={(item) => navigate(`/work/${item.id}`, { sourceBoard: 'my-work' })} />
       </div>

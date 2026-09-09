@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api.js'
+import { runFullSync, syncMonitor, useSyncStatus } from '../useSyncRefresh.js'
 
 function sourceName(source) {
   return { anthropic: 'AI provider', gitlab: 'GitLab', clickup: 'ClickUp', 'google-calendar': 'Google Calendar' }[source] || source
@@ -11,92 +12,39 @@ function sourceState(source) {
 
 export default function SyncDataSettings({ data, compact = false, mode = 'both' }) {
   const [backupDir, setBackupDir] = useState(data?.backup_dir || '')
-  const [sources, setSources] = useState([])
-  const [loadingHealth, setLoadingHealth] = useState(true)
-  const [syncing, setSyncing] = useState(false)
+  const { status, error: healthError } = useSyncStatus()
+  const sources = (status?.sources || []).filter(source => source.source !== 'flock')
+  const loadingHealth = !status && !healthError
+  const [requestRunning, setSyncing] = useState(false)
+  const syncing = requestRunning || status?.running
   const [retryingSource, setRetryingSource] = useState('')
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const mountedRef = useRef(false)
   const pollGenerationRef = useRef(0)
-  const pollTimerRef = useRef(null)
-  const pollWakeRef = useRef(null)
 
   useEffect(() => { setBackupDir(data?.backup_dir || '') }, [data?.backup_dir])
-  const loadHealth = async (generation = pollGenerationRef.current) => {
-    if (!mountedRef.current || generation !== pollGenerationRef.current) return null
-    setLoadingHealth(true)
-    try {
-      const response = await api.syncStatus()
-      if (!mountedRef.current || generation !== pollGenerationRef.current) return null
-      setSources((response.sources || []).filter(source => source.source !== 'flock'))
-      return response
-    }
-    catch {
-      if (mountedRef.current && generation === pollGenerationRef.current) setMessage('Sync health is temporarily unavailable. Cached work is still available.')
-      return null
-    }
-    finally {
-      if (mountedRef.current && generation === pollGenerationRef.current) setLoadingHealth(false)
-    }
-  }
   useEffect(() => {
-    const generation = ++pollGenerationRef.current
+    ++pollGenerationRef.current
     mountedRef.current = true
     setSyncing(false); setRetryingSource('')
-    if (mode === 'data') setLoadingHealth(false)
-    else loadHealth(generation)
     return () => {
       mountedRef.current = false
       pollGenerationRef.current += 1
-      if (pollTimerRef.current) window.clearTimeout(pollTimerRef.current)
-      pollTimerRef.current = null
-      pollWakeRef.current?.()
-      pollWakeRef.current = null
     }
   }, [mode])
 
-  const waitForPoll = () => new Promise((resolve) => {
-    pollWakeRef.current = () => resolve()
-    pollTimerRef.current = window.setTimeout(() => {
-      pollTimerRef.current = null
-      pollWakeRef.current = null
-      resolve()
-    }, 1200)
-  })
-  const pollUntilIdle = async (generation) => {
-    const deadline = Date.now() + 120000
-    while (mountedRef.current && generation === pollGenerationRef.current && Date.now() < deadline) {
-      await waitForPoll()
-      if (!mountedRef.current || generation !== pollGenerationRef.current) return null
-      try {
-        const status = await api.syncStatus()
-        if (!mountedRef.current || generation !== pollGenerationRef.current) return null
-        setSources((status.sources || []).filter(source => source.source !== 'flock'))
-        if (!status.running) return status
-      } catch {
-        return null
-      }
-    }
-    return null
-  }
   const syncAll = async () => {
     if (syncing || retryingSource) return
     const generation = pollGenerationRef.current
     setSyncing(true); setMessage('')
     try {
-      const response = await api.syncAll()
+      const response = await runFullSync()
       if (!mountedRef.current || generation !== pollGenerationRef.current) return
       if (response?.skipped === 'already_running') {
-        setMessage('Another sync is already running. Checking progress…')
-        const status = await pollUntilIdle(generation)
-        if (!mountedRef.current || generation !== pollGenerationRef.current) return
-        if (status && !status.running) setMessage('The existing sync finished.')
-        else setMessage('Sync is still running. Check back shortly.')
+        setMessage('A sync is already running. Progress is shown above; views update automatically when it finishes.')
       } else {
-        setMessage('Sync finished.')
-        await loadHealth(generation)
-        if (!mountedRef.current || generation !== pollGenerationRef.current) return
+        setMessage('Sync attempt finished. See the latest result above and connection details below.')
       }
     }
     catch { if (mountedRef.current && generation === pollGenerationRef.current) setMessage('Could not complete sync. Review the affected integration and retry.') }
@@ -111,7 +59,7 @@ export default function SyncDataSettings({ data, compact = false, mode = 'both' 
       await api.retrySync(source)
       if (!mountedRef.current || generation !== pollGenerationRef.current) return
       setMessage(`${sourceName(source)} retry completed.`)
-      await loadHealth(generation)
+      syncMonitor.check(); syncMonitor.refresh()
     }
     catch { if (mountedRef.current && generation === pollGenerationRef.current) setMessage(`${sourceName(source)} could not retry. Review its local setup.`) }
     finally { if (mountedRef.current && generation === pollGenerationRef.current) setRetryingSource('') }

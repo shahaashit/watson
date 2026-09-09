@@ -287,6 +287,130 @@ def assert_no_horizontal_overflow(page, label: str) -> None:
     assert not overflow, f"{label}: document has horizontal overflow"
 
 
+def run_refresh_checks(page, ids: dict[str, int]) -> None:
+    """Change only intercepted local reads; never start a sync or save drafts."""
+    from playwright.sync_api import expect
+    from urllib.parse import urlsplit, parse_qs
+
+    status_url = f"{BASE_URL}/api/sync/status"
+    state = {'running': False, 'last_sync_at': '2026-01-01T00:00:00', 'revision': 0}
+    writes = []
+
+    def local_reads_only(route):
+        if route.request.method != 'GET':
+            writes.append((route.request.method, route.request.url))
+            route.abort()
+        elif not route.request.url.startswith(BASE_URL + '/'):
+            # Existing web-font stylesheets are irrelevant to cache refresh.
+            # Block external reads as well, without treating them as writes.
+            route.abort()
+        else:
+            route.fallback()
+
+    def status_response(route):
+        response = route.fetch()
+        body = response.json()
+        body.update(running=state['running'], last_sync_at=state['last_sync_at'])
+        route.fulfill(response=response, json=body)
+
+    def replace_title(value, original, replacement):
+        if isinstance(value, dict):
+            return {key: replacement if key == 'title' and item == original
+                    else replace_title(item, original, replacement) for key, item in value.items()}
+        if isinstance(value, list):
+            return [replace_title(item, original, replacement) for item in value]
+        return value
+
+    scenarios = [
+        ('My Work', '/my-work', '/api/work-items/my', 'Prepare the weekly delivery note'),
+        ('Team', '/team', '/api/work-items/team*', 'Blair’s MR context'),
+        ('Log', '/log', '/api/log*', None),
+        ('Work Detail', f"/work/{ids['mine']}", f"/api/work-items/{ids['mine']}",
+         'Prepare the weekly delivery note'),
+    ]
+    page.route(status_url, status_response)
+    try:
+        for label, path, cache_path, original in scenarios:
+            state.update(running=False, last_sync_at='2026-01-01T00:00:00', revision=0)
+            cache_url = BASE_URL + cache_path
+            log_queries = []
+
+            def cache_response(route):
+                response = route.fetch()
+                body = response.json()
+                title = f"Refresh {label} revision {state['revision']}"
+                if label == 'Log':
+                    log_queries.append(parse_qs(urlsplit(route.request.url).query))
+                    if body['items']:
+                        body['items'][0]['title'] = title
+                else:
+                    body = replace_title(body, original, title)
+                route.fulfill(response=response, json=body)
+
+            page.route(cache_url, cache_response)
+            # Last registered route runs first, before any route.fetch().
+            page.route('**/*', local_reads_only)
+            try:
+                with page.expect_response(status_url, timeout=8000) as baseline:
+                    page.goto(BASE_URL + path, wait_until='networkidle')
+                assert baseline.value.json()['running'] is False
+                expect(page.get_by_text(f'Refresh {label} revision 0', exact=True)).to_be_visible()
+                if label == 'My Work':
+                    draft = page.get_by_placeholder('Capture a thought or ask Watson…')
+                    draft.fill('Unsaved My Work capture')
+                elif label == 'Team':
+                    lane = page.locator('.person-lane').filter(
+                        has=page.get_by_role('heading', name='Alex Chen', exact=True))
+                    scroll = lane.locator('.person-lane-scroll')
+                    scroll_top = scroll.evaluate('(node) => { node.scrollTop = 120; return node.scrollTop }')
+                    assert scroll_top > 0
+                elif label == 'Log':
+                    page.get_by_role('button', name='Work context', exact=True).click()
+                    search = page.get_by_placeholder('Search notes and activity…')
+                    with page.expect_response(lambda response: '/api/log?' in response.url
+                                              and 'q=Keep' in response.url):
+                        search.fill('Keep this plan')
+                    expect(page.get_by_text('Refresh Log revision 0', exact=True)).to_be_visible()
+                else:
+                    capture = page.get_by_label('Capture for this work', exact=True)
+                    activity = page.get_by_label('Activity details', exact=True)
+                    capture.fill('Unsaved work capture')
+                    activity.fill('Unsaved activity decision')
+                    page.get_by_label('Type', exact=True).select_option('decision')
+
+                for revision in (1, 2):
+                    if revision == 2:
+                        # Observe a running poll before completing with the SAME
+                        # timestamp, isolating the running-to-idle trigger.
+                        with page.expect_response(status_url, timeout=8000) as running:
+                            state['running'] = True
+                        assert running.value.json()['running'] is True
+                        page.evaluate('() => new Promise(resolve => setTimeout(resolve, 0))')
+                    else:
+                        state['last_sync_at'] = '2026-01-01T00:01:00'
+                    state.update(running=False, revision=revision)
+                    expect(page.get_by_text(f'Refresh {label} revision {revision}', exact=True)).to_be_visible(timeout=8000)
+                    if label == 'My Work':
+                        expect(draft).to_have_value('Unsaved My Work capture')
+                    elif label == 'Team':
+                        assert abs(scroll.evaluate('node => node.scrollTop') - scroll_top) <= 1, 'Refresh reset Team lane scroll'
+                    elif label == 'Log':
+                        expect(search).to_have_value('Keep this plan')
+                        expect(page.get_by_role('button', name='Work context', exact=True)).to_have_class('chip filter active')
+                        assert log_queries[-1] == {'source': ['work'], 'q': ['Keep this plan']}
+                    else:
+                        expect(capture).to_have_value('Unsaved work capture')
+                        expect(activity).to_have_value('Unsaved activity decision')
+                        expect(page.get_by_label('Type', exact=True)).to_have_value('decision')
+                print(f'Refresh verification passed: {label}, both completion signals and preserved local state', flush=True)
+            finally:
+                page.unroute('**/*', local_reads_only)
+                page.unroute(cache_url, cache_response)
+    finally:
+        page.unroute(status_url, status_response)
+    assert not writes, f'Refresh verification attempted writes: {writes}'
+
+
 def run_browser_checks(ids: dict[str, int]) -> None:
     from playwright.sync_api import sync_playwright
 
@@ -464,6 +588,8 @@ def run_browser_checks(ids: dict[str, int]) -> None:
                     method == "PATCH" and url == f"{BASE_URL}/api/settings/profile"
                     for method, url in write_requests
                 ), "browser verification must not invoke an external-write endpoint"
+                if width == 1440:
+                    run_refresh_checks(page, ids)
                 page.close()
         finally:
             browser.close()

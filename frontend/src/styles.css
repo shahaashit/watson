@@ -1937,6 +1937,23 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--violet); outlin
   .nav-actions { gap: 0; }
 }
 
+.sync-status-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 1392px;
+  margin: 12px auto 0;
+  padding: 0 12px;
+  color: var(--text-muted, #64748b);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.sync-status-dot { width: 6px; height: 6px; flex-shrink: 0; border-radius: 50%; background: #08916f; }
+.sync-status-dot.syncing { background: #6554e8; animation: sync-pulse 1.5s ease-in-out infinite; }
+.sync-status-cadence { margin-left: auto; white-space: nowrap; }
+@keyframes sync-pulse { 50% { opacity: .35; } }
+@media (max-width: 600px) { .sync-status-cadence { display: none; } }
+
 /* Motion communicates loading or entry, never ambient decoration. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

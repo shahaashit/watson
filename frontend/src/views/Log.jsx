@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react'
 import { api } from '../api.js'
 import EntryCard from '../components/EntryCard.jsx'
 import { navigate } from '../routing.js'
+import { useCallback } from 'react'
+import { useCacheRefresh } from '../useSyncRefresh.js'
 
 // Icon per row kind. Entries use their `type`; events use the event `kind`.
 const ICON = {
@@ -42,6 +44,8 @@ export default function Log({ initialQuery = '' }) {
   const [loading, setLoading] = useState(true)
   const [reload, setReload] = useState(0)
   const logGenerationRef = useRef(0)
+  const refresh = useCallback(() => setReload(n => n + 1), [])
+  useCacheRefresh(refresh)
 
   useEffect(() => {
     const generation = ++logGenerationRef.current
@@ -114,7 +118,7 @@ export default function Log({ initialQuery = '' }) {
       )}
       {error && <p className="error-text">{error}</p>}
       <div className="entry-list">
-        {loading && <p className="empty">Loading timeline…</p>}
+        {loading && !items.length && <p className="empty">Loading timeline…</p>}
         {items.map((item) => (
           item.source === 'entry'
             ? <EntryCard key={item.id} entry={{ ...item, id: item.entry_id }}

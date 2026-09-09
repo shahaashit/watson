@@ -46,9 +46,8 @@ test('work lists keep native drag ordering affordances', () => {
 test('My Work isolates cached health from calendar loading', () => {
   const source = fs.readFileSync(new URL('../src/views/MyWork.jsx', import.meta.url), 'utf8')
   assert.match(source, /api\.today/)
-  assert.match(source, /api\.syncStatus/)
   assert.match(source, /loadCalendar/)
-  assert.match(source, /loadHealth/)
+  assert.match(source, /useSyncStatus/)
 })
 
 test('integration health displays safe cached state metadata', () => {
@@ -132,7 +131,7 @@ test('Settings keeps secrets write-only and exposes the real source controls', (
 
 test('Sync settings reports an already-running sync honestly and guards retries', () => {
   const syncData = fs.readFileSync(new URL('../src/components/SyncDataSettings.jsx', import.meta.url), 'utf8')
-  for (const token of ['skipped', 'already_running', 'api.syncStatus', 'retryingSource', 'disabled={syncing || retryingSource']) {
+  for (const token of ['skipped', 'already_running', 'useSyncStatus', 'retryingSource', 'disabled={syncing || retryingSource']) {
     assert.match(syncData, new RegExp(token.replace('.', '\\.').replace('{', '\\{')))
   }
   assert.doesNotMatch(syncData, /await api\.syncAll\(\); setMessage\('Sync finished\.'/)

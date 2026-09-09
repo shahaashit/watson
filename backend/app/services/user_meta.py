@@ -81,6 +81,35 @@ def set_last_sync_at(conn, ts: str = "") -> None:
     set_meta(conn, LAST_SYNC_AT_KEY, ts or now_iso())
 
 
+def set_last_sync_completion(conn, duration_seconds: float, error_count: int) -> None:
+    """Publish one completed attempt atomically; never persist error details."""
+    ts = now_iso()
+    conn.executemany(
+        "INSERT INTO user_meta (key, value, updated_at) VALUES (?, ?, ?)"
+        " ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+        [
+            (LAST_SYNC_AT_KEY, ts, ts),
+            ("last_sync_duration_seconds", str(duration_seconds), ts),
+            ("last_sync_error_count", str(error_count), ts),
+        ],
+    )
+    conn.commit()
+
+
+def last_sync_status(conn) -> dict:
+    """Read completion metrics in one snapshot, including pre-metrics databases."""
+    values = dict(conn.execute(
+        "SELECT key, value FROM user_meta WHERE key IN (?, ?, ?)",
+        (LAST_SYNC_AT_KEY, "last_sync_duration_seconds", "last_sync_error_count"),
+    ))
+    duration = values.get("last_sync_duration_seconds")
+    return {
+        "last_sync_at": values.get(LAST_SYNC_AT_KEY) or "",
+        "last_sync_duration_seconds": float(duration) if duration else None,
+        "last_sync_error_count": int(values.get("last_sync_error_count") or 0),
+    }
+
+
 # ─── structured integration health ──────────────────────────────────────
 
 INTEGRATION_SOURCES = ("clickup", "gitlab", "google-calendar", "flock")

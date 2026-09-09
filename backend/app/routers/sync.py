@@ -8,7 +8,7 @@ router = APIRouter(prefix="/api", tags=["sync"])
 
 @router.post("/sync")
 def sync_all(conn=Depends(get_db)):
-    """Full sync pipeline — the same one `job_sync` runs at :00/:30 IST.
+    """Full sync pipeline — the same one `job_sync` runs every ten clock-aligned minutes.
 
     Blocks until the pipeline finishes so the UI's Sync-now button can hold
     its "Syncing…" state for the whole run and show results in one refresh.
@@ -28,12 +28,12 @@ def sync_all(conn=Depends(get_db)):
 @router.get("/sync/status")
 def sync_status(conn=Depends(get_db)):
     """Whether any pipeline (route- or scheduler-driven) is currently running.
-    Also returns the ISO timestamp of the last completed sync attempt so the
-    frontend's auto-focus-sync logic can decide staleness without a
-    separate round-trip."""
+    Includes persisted metrics for the last completed attempt, even if some
+    steps failed. This local-only read is safe to poll every three seconds."""
     return {
         "running": sync_pipeline.is_running(),
-        "last_sync_at": user_meta.last_sync_at(conn),
+        **user_meta.last_sync_status(conn),
+        "sync_interval_seconds": 600,
         "sources": user_meta.integration_health(conn),
     }
 

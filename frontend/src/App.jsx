@@ -10,6 +10,7 @@ import Settings from './views/Settings.jsx'
 import Onboarding from './views/Onboarding.jsx'
 import CommandBar from './components/CommandBar.jsx'
 import useDismissibleLayer from './useDismissibleLayer.js'
+import { runFullSync, useSyncMonitor, useSyncStatus } from './useSyncRefresh.js'
 
 const VIEWS = [
   { key: 'my-work', label: 'My Work', path: '/my-work' },
@@ -18,6 +19,10 @@ const VIEWS = [
 ]
 
 export default function App() {
+  useSyncMonitor()
+  const { status: syncStatus, error: syncError } = useSyncStatus()
+  const [manualSyncing, setManualSyncing] = useState(false)
+  const [manualSyncError, setManualSyncError] = useState('')
   const [route, setRoute] = useState(() => parseRoute(window.location.pathname))
   const [logQuery, setLogQuery] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -44,7 +49,12 @@ export default function App() {
     const target = VIEWS.find((item) => item.key === view)
     if (target) navigate(target.path)
   }, [])
-  const syncAll = useCallback(() => api.syncAll().finally(() => window.dispatchEvent(new Event('watson:today-dirty'))), [])
+  const syncAll = useCallback(async () => {
+    setManualSyncing(true); setManualSyncError('')
+    try { return await runFullSync() }
+    catch { setManualSyncError('Could not confirm sync completion. Check connection status in Settings.') }
+    finally { setManualSyncing(false) }
+  }, [])
   const addWork = () => {
     setView('my-work')
     window.setTimeout(() => window.dispatchEvent(new Event('watson:add-work')), 0)
@@ -87,7 +97,7 @@ export default function App() {
               <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="3" /><path d="M10 2.75v1.5M10 15.75v1.5M2.75 10h1.5M15.75 10h1.5M4.88 4.88l1.06 1.06M14.06 14.06l1.06 1.06M15.12 4.88l-1.06 1.06M5.94 14.06l-1.06 1.06" /></svg>
               <span><strong>Settings</strong><small>Connections and preferences</small></span>
             </button>
-            <button type="button" role="menuitem" onClick={() => { syncAll(); setSettingsOpen(false) }}>
+            <button type="button" role="menuitem" disabled={manualSyncing || syncStatus?.running} onClick={() => { syncAll(); setSettingsOpen(false) }}>
               <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15.5 6.5V3.75h-2.75M4.5 13.5v2.75h2.75M14.7 7A5.25 5.25 0 0 0 5.2 6M5.3 13a5.25 5.25 0 0 0 9.5 1" /></svg>
               <span><strong>Sync now</strong><small>Refresh connected services</small></span>
             </button>
@@ -95,6 +105,11 @@ export default function App() {
         </div>
       </div>
     </nav>
+    <div className="sync-status-strip" role="status" aria-live="polite">
+      <span className={`sync-status-dot${syncStatus?.running || manualSyncing ? ' syncing' : ''}`} aria-hidden="true" />
+      <span>{syncError || manualSyncError || (syncStatus?.running || manualSyncing ? 'Syncing connected services… Your cached work stays available.' : syncStatus?.last_sync_at ? `Last refreshed ${new Date(syncStatus.last_sync_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${syncStatus.last_sync_duration_seconds != null ? ` · ${Math.round(syncStatus.last_sync_duration_seconds)}s` : ''}${syncStatus.last_sync_error_count ? ' · Some updates failed — check Settings → Sync' : ''}` : 'Waiting for the first sync')}</span>
+      <span className="sync-status-cadence">Every 10 min</span>
+    </div>
     {onboardingError && <div className="app-bootstrap-error" role="alert"><span>{onboardingError}</span><button type="button" onClick={loadOnboarding} disabled={onboardingLoading}>{onboardingLoading ? 'Retrying…' : 'Retry'}</button></div>}
     <main className="main">{renderView()}</main>
     <CommandBar setView={setView} syncAll={syncAll} setLogQuery={setLogQuery}

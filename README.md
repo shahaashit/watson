@@ -15,6 +15,38 @@ Settings is always available from the gear menu. The first launch opens the
 same setup controls: profile, integrations, tracked people, connection checks,
 and backup location. Everything remains editable later.
 
+## Sync schedule and status
+
+External synchronization runs every ten minutes, aligned to :00, :10, :20,
+:30, :40, and :50 in the configured profile timezone (`cron minute="*/10"`).
+Timezone changes preserve this schedule. Startup still warms caches in the
+background, and **Sync now** uses the same pipeline. Overlapping full-sync
+requests return `{"skipped":"already_running"}` without changing completion
+metadata.
+
+`GET /api/sync/status` is a local-only read suitable for a shared UI poll every
+three seconds; polling does not contact external services. It preserves
+`running`, `last_sync_at`, and `sources`, and adds:
+
+- `last_sync_duration_seconds`: elapsed duration of the last completed attempt,
+  or `null` before metrics exist.
+- `last_sync_error_count`: numeric failure summary (default `0`), counting
+  failed steps, failed/skipped exact ClickUp refreshes, and failed/uncertain
+  review-automation outcomes. Benign busy skips and deferred work do not count.
+- `sync_interval_seconds`: `600`.
+
+Completion time, duration, and error count are persisted together in SQLite
+`user_meta`, including partial failures; an unexpected pipeline abort records
+one error. A running or skipped attempt leaves the previous completion visible
+until the active attempt finishes. These metrics contain no raw error details.
+
+While Watson is visible, one shared status poll checks for completed syncs every
+three seconds. My Work (including calendar, inbox and suggestions), Team, Log,
+and open work details then reload their cached data in place. Returning to a
+hidden tab also refreshes these views. Drafts and filters stay intact; board
+refreshes wait until dragging and priority saves finish. Settings uses the same
+live connection status without resetting editable setup fields.
+
 ## Install on macOS
 
 Requirements: macOS, Git, Python 3.10 or newer, and Node 18 or newer with npm.

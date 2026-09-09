@@ -3,6 +3,7 @@ import { api } from '../api.js'
 import { moveBoardCard } from '../boardOrder.js'
 import { placementAround } from '../teamDrag.js'
 import WorkCard from './WorkCard.jsx'
+import { syncMonitor } from '../useSyncRefresh.js'
 
 export function laneKey(lane) {
   return lane.person ? `person:${lane.person.id}` : `special:${lane.name}`
@@ -50,8 +51,10 @@ export default function PersonLane({ lane, onItemsChange, onOpen }) {
     catch (err) { setError(err.message); return }
     onItemsChange(updatedBoard.items)
     setError('')
+    const release = syncMonitor.hold()
     try { await api.moveWork(movedId, { state: item.state, before_id: beforeId ?? null, after_id: afterId ?? null }) }
     catch { onItemsChange(rollbackItems); setError('Could not save the local priority order.') }
+    finally { release() }
   }
 
   const beginPointer = (event, item) => {

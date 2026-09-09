@@ -3,7 +3,7 @@
 Single-user localhost work assistant. Read CLAUDE.md at the repo root before
 making structural changes. Key invariants this module enforces:
 
-  * Scheduler is `cron minute='0,30'` (every :00 and :30 IST) — user explicitly
+  * Scheduler is `cron minute='*/10'` (every ten clock-aligned minutes) — user explicitly
     asked for clock-aligned times. Don't switch to `interval` without asking.
   * Boot sync runs in a daemon thread so startup never blocks on the network
     (matters for the always-on launchd agent + KeepAlive restarts).
@@ -79,9 +79,9 @@ def _backfill_work_at_startup() -> None:
 def start_scheduler() -> BackgroundScheduler:
     tz = ZoneInfo(settings.tz)
     scheduler = BackgroundScheduler(timezone=tz)
-    # cron with minute="0,30" so it fires at the top and half-hour of every
+    # cron with minute="*/10" so it fires every ten minutes of every
     # hour regardless of restart time — easier to predict than interval.
-    scheduler.add_job(job_sync, "cron", minute="0,30", id="connector_sync")
+    scheduler.add_job(job_sync, "cron", minute="*/10", id="connector_sync")
     hour, minute = settings.digest_time.split(":")
     scheduler.add_job(job_digest, "cron", hour=int(hour), minute=int(minute), id="morning_digest")
     scheduler.add_job(job_export, "cron", hour=23, minute=55, id="daily_export")
@@ -105,7 +105,7 @@ def reschedule_scheduler_timezone(
         }
         try:
             _scheduler.reschedule_job(
-                "connector_sync", trigger="cron", minute="0,30", timezone=tz
+                "connector_sync", trigger="cron", minute="*/10", timezone=tz
             )
             hour, minute = settings.digest_time.split(":")
             _scheduler.reschedule_job(

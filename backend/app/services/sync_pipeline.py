@@ -1,7 +1,7 @@
 """Single source of truth for the periodic sync pipeline.
 
 `job_sync` (scheduler) and `POST /api/sync` (the UI's "Sync now" button) both
-call this, so the button produces the exact same outcome as the :00 / :30 tick.
+call this, so the button produces the same outcome as each ten-minute cron tick.
 
 Ordering matters: independent caches are refreshed FIRST. Cached MRs are then
 ingested into local work, linked ClickUp IDs are derived from that result, only
@@ -208,17 +208,39 @@ def run_sync_pipeline(conn) -> dict:
     if not _sync_lock.acquire(blocking=False):
         log.info("sync: skipped, another pipeline is already in flight")
         return {"skipped": "already_running"}
+    started = time.monotonic()
+    error_count = 1  # An unexpected abort still records a failed attempt.
     try:
         result = _run_sync_pipeline_locked(conn)
-        # Stamp completion time regardless of per-step success — the frontend
-        # uses this to detect "have we tried recently" (auto-sync on focus
-        # after Mac wake). Individual step failures still show up in the
-        # returned summary and in server.log.
-        from . import user_meta
-        user_meta.set_last_sync_at(conn)
+        error_count = _sync_error_count(result)
         return result
     finally:
-        _sync_lock.release()
+        try:
+            user_meta.set_last_sync_completion(
+                conn, time.monotonic() - started, error_count
+            )
+        finally:
+            _sync_lock.release()
+
+
+def _sync_error_count(summary: dict) -> int:
+    """Count failed steps and reported partial outcomes, excluding benign skips."""
+    count = 0
+    for name, result in summary.items():
+        if not isinstance(result, dict):
+            continue
+        if "error" in result:
+            count += 1
+            continue
+        fields = (
+            ("failed", "skipped") if name == "clickup_exact" else
+            ("failed", "uncertain") if name == "review_automation" else ()
+        )
+        count += sum(
+            max(0, value) for field in fields
+            if isinstance((value := result.get(field)), int)
+        )
+    return count
 
 
 def _run_sync_pipeline_locked(conn) -> dict:

@@ -5,6 +5,7 @@ import ActivityThread from '../components/ActivityThread.jsx'
 import LinkedWork from '../components/LinkedWork.jsx'
 import PendingAction from '../components/PendingAction.jsx'
 import WorkFollowups from '../components/WorkFollowups.jsx'
+import { useCacheRefresh } from '../useSyncRefresh.js'
 
 const ACTIVITY_TYPES = [
   ['note', 'Note'],
@@ -65,6 +66,7 @@ export default function WorkDetail({ workItemId }) {
   const loadDetail = useCallback(async (signal) => {
     try {
       const response = await api.workDetail(workItemId, { signal })
+      if (signal?.aborted) return
       setDetail(response.work_item); setError('')
     } catch (err) {
       if (err.name !== 'AbortError') setError('This work item could not be loaded. It may have been removed.')
@@ -74,10 +76,10 @@ export default function WorkDetail({ workItemId }) {
   useEffect(() => {
     const controller = new AbortController()
     setLoading(true); setDetail(null)
-    loadDetail(controller.signal)
     api.people({ signal: controller.signal }).then((response) => setPeople(response.people || [])).catch(() => setPeople([]))
     return () => controller.abort()
   }, [loadDetail])
+  useCacheRefresh(loadDetail)
 
   const submitActivity = async (event) => {
     event.preventDefault()

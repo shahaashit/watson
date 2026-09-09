@@ -15,7 +15,7 @@ function buildActions(setView, syncAll, addWork, navigateTo) {
     { id: 'a-team', icon: '👥', title: 'Team',
       subtitle: 'Tracked people and their work', keywords: 'team people lanes', run: () => setView('team') },
     { id: 'a-add-work', icon: '＋', title: 'Add Work',
-      subtitle: 'Create a local work item', keywords: 'create new work task', run: () => addWork() },
+      subtitle: 'Add something to your workspace', keywords: 'create new work task', run: () => addWork() },
     { id: 'a-capture', icon: '📝', title: 'Capture',
       subtitle: 'Focus the capture box', keywords: 'capture note new',
       run: () => { setView('my-work'); window.setTimeout(() => window.dispatchEvent(new Event('watson:focus-capture')), 0) } },

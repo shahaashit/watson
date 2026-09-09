@@ -28,6 +28,9 @@ def main():
                 'client_id': args.gitlab_client_id or app_settings.get(conn, 'integration.gitlab.oauth_client_id', ''),
                 'allow_http': args.allow_http or app_settings.get(conn, 'integration.gitlab.oauth_allow_http', False),
             }, 'google_calendar': json.loads(secret_store.get_secret('google.client_config'))}
+            clickup_config = secret_store.get_secret('clickup.client_config')
+            if clickup_config:
+                data['clickup'] = json.loads(clickup_config)
             setup_bundle.validate(data)
             target = Path(args.path).expanduser()
             # Exclusive creation prevents overwriting an existing private file.

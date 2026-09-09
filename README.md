@@ -39,7 +39,7 @@ an `.env` file or API tokens.
 ### Colleague setup: one shared file
 
 Your team can supply a private **`.watson-setup.json`** containing its GitLab
-application settings and Google **Desktop** OAuth client configuration. Place
+application settings, ClickUp OAuth app credentials, and Google **Desktop** OAuth client configuration. Place
 it in the repository root before installing (it is gitignored), or pass its path:
 
 ```bash
@@ -48,11 +48,11 @@ it in the repository root before installing (it is gitignored), or pass its path
 
 The installer also accepts `WATSON_SETUP_FILE=/absolute/path/to/file.json`.
 It parses JSON as data, never executes it as shell code, and never prints its
-contents. The importer stores Google client credentials in macOS Keychain and
+contents. The importer stores ClickUp and Google client credentials in macOS Keychain and
 GitLab's non-secret application ID/server in the local database. It does not
 sign anyone in automatically. Each colleague clicks **Connect GitLab** and
-**Connect Google**, authorizes their own account in the provider's browser
-window, and selects their GitLab repositories in Watson.
+**Connect Google** or **Connect ClickUp**, authorizes their own account in the provider's browser
+window, and selects their GitLab repositories or ClickUp Workspace, Space and destination List in Watson.
 
 For an existing installation, import the file and restart:
 
@@ -62,12 +62,26 @@ For an existing installation, import the file and restart:
 ```
 
 Use [`watson-setup.example.json`](watson-setup.example.json) for the schema.
-Either integration can be omitted. The shared file must contain only
+Any integration can be omitted. The shared file must contain only
 application configuration: **never add personal GitLab tokens, Google access
 or refresh tokens, AI keys, ClickUp tokens, or a GitLab client secret.**
 Keep the real file private and out of source control, including renamed copies.
 Google Desktop client configuration is distributed to installed clients; it
 must not be replaced with a confidential Web/server OAuth client.
+
+For ClickUp, a Workspace owner/admin registers an OAuth application with the
+exact redirect URI `http://127.0.0.1:18766/callback`. Put its client ID and client
+secret in the `clickup` section shown in the example file. This localhost-only
+distribution means recipients can retrieve the shared app secret: distribute
+only to trusted colleagues with the app owner's approval, never publicly.
+Each person receives their own authorization token. After connecting, select
+the Workspace, Space and List where Watson may create tasks, then save the
+destination. Only authorized destinations are accepted. Connecting does not
+create tasks; the separate review-automation preference governs future sync.
+After reconnecting, select the destination again. Revoked access prompts
+**Reconnect ClickUp**; it never silently falls back to an old personal token.
+Onboarding and Settings use browser sign-in only. Existing token-based
+connections are preserved until replaced by a successful OAuth connection.
 
 Register a GitLab application as a **public client** (Confidential unchecked),
 with scope `read_api` and this exact redirect URI:
@@ -104,8 +118,8 @@ would require different redirect URIs, authentication, and credential storage.
 If a network uses private package mirrors, create a local, uncommitted
 `.watson-install.env` with only `PIP_INDEX_URL`, `PIP_TRUSTED_HOST`, and/or
 `NPM_CONFIG_REGISTRY`. You can use [`.env.example`](.env.example) as a blank,
-generic reference. Existing installations may instead use **Import .env** in
-Settings; that is an explicit migration action, not the default setup path.
+generic reference. This optional installer file is only for package mirrors,
+not integration credentials. Settings no longer offers `.env` imports.
 
 ## First launch and integrations
 
@@ -128,10 +142,10 @@ require one. No coding-agent application is required to run Watson.
 
 | Integration | What you supply | Steps outside Watson |
 |---|---|---|
-| AI provider | Anthropic-compatible API key, available model, and optional gateway base URL | Obtain your own API credentials from your provider or administrator. |
-| GitLab | Click Connect GitLab when a shared setup file is imported, then select repositories. Manual token setup remains available. | Sign in and approve read access on your GitLab instance. Your account must have access to the selected projects. |
-| ClickUp | Personal API token and destination **Create-list ID** | Generate your own token and choose a list where you can create tasks. A successful connection check does not prove permission to create in that list. |
-| Google Calendar (optional) | Click Connect Google when the shared file supplies its Desktop client; otherwise supply client JSON manually. | Authorize your own Google account in the browser opened by Connect Google. |
+| AI provider | Select FastRouter and paste your own API key. Endpoint and model are prefilled under Advanced settings; existing custom configurations are preserved. | Open the FastRouter link, sign in, and create a project key for Watson with a spending limit. |
+| GitLab | Click Connect GitLab after importing the setup file, then select repositories. | Sign in and approve read access on your GitLab instance. Your account must have access to the selected projects. |
+| ClickUp | Connect ClickUp with shared app setup, then choose Workspace, Space and List. | Authorize your own account and Workspaces. Successful read access does not prove task-creation permissions. |
+| Google Calendar (optional) | Click Connect Google after importing the setup file containing its Desktop client. | Authorize your own Google account in the browser opened by Connect Google. |
 
 For token creation, see [GitLab personal tokens](https://docs.gitlab.com/user/profile/personal_access_tokens/)
 and [token scopes](https://docs.gitlab.com/security/tokens/access_token_scopes/),
@@ -139,6 +153,21 @@ and [ClickUp personal-token authentication](https://developer.clickup.com/docs/a
 For a ClickUp list ID, open the intended List in ClickUp and inspect its URL;
 use the list identifier, not a task, folder, workspace, or view identifier.
 Private GitLab instances may require your organization's network or VPN.
+
+### AI provider setup
+
+Onboarding and Settings offer FastRouter with API-key authentication (not OAuth).
+Use **Get a FastRouter API key**, open your project's Keys section, and create a
+key for Watson. Paste it into Watson, save, and use **Test connection**. The key
+is stored in macOS Keychain; leave the replacement field blank to keep it, or
+paste a new key and save after revoking/rotating an old one. Endpoint changes
+in the form require a replacement key so an existing key is not reused for
+another host accidentally.
+
+**Advanced settings** retains the Anthropic-compatible endpoint and model.
+Existing custom connections are not overwritten. Each colleague should use
+their own key; do not add personal AI keys or administrator provisioning keys
+to the shared setup file.
 
 ### Google Calendar setup
 
@@ -160,8 +189,9 @@ no OAuth JSON file needs to be placed in the repository.
 Share the GitHub repository link and grant access while it is private. A fresh
 clone contains all application code, prompts, dependency manifests, and install
 scripts. For the guided team setup, also share **only `.watson-setup.json`**
-as described above. Without that optional file, recipients can configure their
-own integrations manually. Each person starts with an empty local database
+as described above. Without that file, recipients can use local work and AI
+features; OAuth integrations require a setup file from their administrator.
+Each person starts with an empty local database
 and authorizes their own accounts; no developer database or personal tokens
 are needed.
 

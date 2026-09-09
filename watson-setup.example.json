@@ -1,5 +1,10 @@
 {
   "version": 1,
+  "clickup": {
+    "client_id": "REPLACE_WITH_CLICKUP_CLIENT_ID",
+    "client_secret": "REPLACE_WITH_CLICKUP_CLIENT_SECRET",
+    "redirect_uri": "http://127.0.0.1:18766/callback"
+  },
   "gitlab": {
     "base_url": "https://gitlab.example.com",
     "client_id": "REPLACE_WITH_PUBLIC_APPLICATION_ID",

@@ -31,7 +31,7 @@ export default function Team() {
   }
 
   return <div className="team-page">
-    <header className="team-header"><div><p className="eyebrow">Team</p><h1>Shared context, locally prioritized.</h1><p>Watson keeps each tracked person in a fixed lane. Reordering changes only your local priority.</p></div><div className="team-header-actions"><button type="button" className={`team-me-mode${meMode ? ' active' : ''}`} role="switch" aria-checked={meMode} onClick={toggleMeMode}><span aria-hidden="true" />Me mode</button><button type="button" className="team-retry" onClick={() => { setLoading(true); load() }}>Refresh</button></div></header>
+    <header className="team-header"><div><p className="eyebrow">Team</p><h1>A clear view of your team.</h1><p>See what everyone is working on. Drag cards to set your own priorities.</p></div><div className="team-header-actions"><button type="button" className={`team-me-mode${meMode ? ' active' : ''}`} role="switch" aria-checked={meMode} onClick={toggleMeMode}><span aria-hidden="true" />Me mode</button><button type="button" className="team-retry" onClick={() => { setLoading(true); load() }}>Refresh</button></div></header>
     {loading ? <p className="work-loading">Loading the team board…</p> : error ? <div className="team-error" role="alert"><p>{error}</p><button type="button" onClick={() => { setLoading(true); load() }}>Try again</button></div> : <div className="team-lanes" aria-label="Team work lanes">
       {lanes.map((lane, index) => <PersonLane key={lane.person?.id || lane.name} lane={lane} onItemsChange={(items) => setLaneItems(index, items)} onOpen={(item) => navigate(`/work/${item.id}`, { sourceBoard: 'team' })} />)}
     </div>}

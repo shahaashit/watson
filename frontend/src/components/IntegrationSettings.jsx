@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { api } from '../api.js'
 import GitLabProjectPicker from './GitLabProjectPicker.jsx'
 import GitLabConnect from './GitLabConnect.jsx'
+import ClickUpConnect from './ClickUpConnect.jsx'
+import ClickUpDestination from './ClickUpDestination.jsx'
 
 const INTEGRATIONS = [
   { source: 'anthropic', title: 'AI provider', hint: 'Capture classification and Ask need an AI provider.', secret: 'api_key', secretLabel: 'API key', fields: [['base_url', 'Base URL'], ['model', 'Model']] },
@@ -10,7 +12,16 @@ const INTEGRATIONS = [
   { source: 'google-calendar', title: 'Google Calendar', hint: 'Calendar stays optional; local work is still available without it.', secret: 'client_config_json', secretLabel: 'OAuth client configuration JSON', fields: [] },
 ]
 
-const SOURCE_LABEL = Object.fromEntries(INTEGRATIONS.map(({ source, title }) => [source, title]))
+const SOURCE_LABEL = { ...Object.fromEntries(INTEGRATIONS.map(({ source, title }) => [source, title])), 'review-automation': 'Review automation' }
+const FASTROUTER_URL = 'https://go.fastrouter.ai'
+const DEFAULT_AI_MODEL = 'claude-sonnet-4-6'
+
+function isFastRouter(baseUrl) {
+  try {
+    const url = new URL(baseUrl)
+    return url.protocol === 'https:' && ['go.fastrouter.ai', 'api.fastrouter.ai'].includes(url.hostname)
+  } catch { return false }
+}
 
 function safeError() {
   return 'That action could not be completed. Review the local configuration and try again.'
@@ -18,7 +29,12 @@ function safeError() {
 
 function configFor(source, integration) {
   const fields = INTEGRATIONS.find((item) => item.source === source)?.fields || []
-  return Object.fromEntries(fields.map(([key]) => [key, integration?.[key] || '']))
+  const values = Object.fromEntries(fields.map(([key]) => [key, integration?.[key] || '']))
+  if (source === 'anthropic') {
+    if (!values.base_url && !integration?.configured && !integration?.credential_present) values.base_url = FASTROUTER_URL
+    if (!values.model) values.model = DEFAULT_AI_MODEL
+  }
+  return values
 }
 
 function stateLabel(integration) {
@@ -132,6 +148,10 @@ function IntegrationCard({ definition, integration, onChanged }) {
   const save = async (event) => {
     event.preventDefault()
     if (busy) return
+    if (source === 'anthropic' && (!integration?.credential_present || values.base_url !== (integration?.base_url || '')) && !secretValue.trim()) {
+      setMessage('Enter a valid API key before saving a new connection or changing the endpoint.')
+      return
+    }
     setBusy('save'); setMessage('')
     const payload = { ...values }
     if (secret && secretValue.trim()) payload[secret] = secretValue.trim()
@@ -151,13 +171,6 @@ function IntegrationCard({ definition, integration, onChanged }) {
     } catch { setMessage('Connection test could not run. Save valid local settings, then try again.') }
     finally { setBusy('') }
   }
-  const importEnv = async () => {
-    if (busy) return
-    setBusy('import'); setMessage('')
-    try { await api.importIntegrationEnv(source); setMessage('Imported local environment settings.'); onChanged?.() }
-    catch { setMessage('No usable local environment settings were found.') }
-    finally { setBusy('') }
-  }
   const disconnect = async () => {
     if (busy) return
     setBusy('disconnect'); setMessage('')
@@ -172,33 +185,54 @@ function IntegrationCard({ definition, integration, onChanged }) {
       const response = await api.connectGoogleCalendar()
       setOauth({ sessionId: response.session_id, startedAt: Date.now() })
       setMessage('Finish authorization in the local browser window. Watson will check the result for up to two minutes.')
-    } catch { setMessage('Could not start local Google authorization. Save client configuration and try again.'); setBusy('') }
+    } catch { setMessage('Could not start Google authorization. Check your setup file and try again.'); setBusy('') }
   }
   const actionBusy = Boolean(busy)
+  const aiProvider = source === 'anthropic'
+  const connectionFields = fields.map(([key, label]) => <label key={key}>{label}<input value={values[key] || ''} onChange={(event) => setValues((current) => ({ ...current, [key]: event.target.value }))} disabled={actionBusy} /></label>)
+  const credentialField = secret && <>
+    <label>{aiProvider && integration?.credential_present ? 'Replace API key' : secretLabel}<textarea value={secretValue} onChange={(event) => setSecretValue(event.target.value)} placeholder={integration?.credential_present ? 'Stored credential present — enter a replacement only' : 'Enter once to save locally'} disabled={actionBusy} rows={source === 'google-calendar' ? 4 : 1} aria-describedby={`${source}-credential-note`} required={aiProvider && (!integration?.credential_present || values.base_url !== (integration?.base_url || ''))} /></label>
+    <p className="settings-secret-note" id={`${source}-credential-note`}>{integration?.credential_present ? (aiProvider ? 'A credential is already present. Leave blank to keep it, or paste a replacement and save. Changing the endpoint requires a new key.' : 'A credential is already present. This write-only field is blank until you choose to rotate it.') : 'This write-only value is stored locally in macOS Keychain.'}</p>
+  </>
 
-  return <article className="integration-settings-card">
-    <header><div><h3>{title}</h3><p>{hint}</p></div><span className={`integration-state ${integration?.configured ? 'configured' : ''}`}>{stateLabel(integration)}</span></header>
+  return <article className="integration-settings-card" data-provider={source}>
+    <header><div><h3 aria-label={title}>{title}</h3><p>{hint}</p></div><span className={`integration-state ${integration?.configured ? 'configured' : ''}`}>{stateLabel(integration)}</span></header>
+    {!aiProvider && <div className="oauth-connection-section">
     {source === 'gitlab' && integration?.oauth_available && <>
       <p>Application setup is ready for {integration.base_url}.</p>
       <GitLabConnect connected={integration.oauth_connected} onConnected={onChanged} />
     </>}
     {source === 'google-calendar' && integration?.credential_present && <p>Application setup is ready. Use Connect Google to authorize your own account.</p>}
-    <form className="settings-form integration-form" onSubmit={save}>
-      <details open={!(source === 'gitlab' && integration?.oauth_available) && !(source === 'google-calendar' && integration?.credential_present)}>
-      <summary>Manual connection settings</summary>
-      {fields.map(([key, label]) => <label key={key}>{label}<input value={values[key] || ''} onChange={(event) => setValues((current) => ({ ...current, [key]: event.target.value }))} disabled={actionBusy} /></label>)}
-      {secret && <label>{secretLabel}<textarea value={secretValue} onChange={(event) => setSecretValue(event.target.value)} placeholder={integration?.credential_present ? 'Stored credential present — enter a replacement only' : 'Enter once to save locally'} disabled={actionBusy} rows={source === 'google-calendar' ? 4 : 1} aria-describedby={`${source}-credential-note`} /></label>}
-      {secret && <p className="settings-secret-note" id={`${source}-credential-note`}>{integration?.credential_present ? 'A credential is already present. This write-only field is blank until you choose to rotate it.' : 'This write-only value is stored locally in macOS Keychain.'}</p>}
-      </details>
+    {source === 'clickup' && integration?.oauth_available && <>
+      <p>Connect your ClickUp account, then choose where Watson should create tasks.</p>
+      <ClickUpConnect connected={integration.oauth_connected} onConnected={onChanged} />
+    </>}
+    {!(source === 'google-calendar' ? integration?.credential_present : integration?.oauth_available) && <p className="integration-setup-note">Ask your administrator for the private Watson setup file and import it using the installer. Then sign in here with your own account.</p>}
+    {source === 'clickup' && integration?.configured && !integration?.oauth_connected && <p className="settings-secret-note">Your existing connection is still active. Connect ClickUp to switch to browser sign-in.</p>}
+    <div className="integration-actions">
+      {source === 'google-calendar' && <button className="settings-primary" type="button" onClick={connectGoogle} disabled={actionBusy || Boolean(oauth) || !integration?.credential_present}>{oauth ? 'Waiting for Google…' : integration?.configured ? 'Reconnect Google' : 'Connect Google'}</button>}
+      {integration?.configured && <button type="button" onClick={test} disabled={actionBusy}>{busy === 'test' ? 'Testing…' : 'Test connection'}</button>}
+      {(integration?.configured || integration?.oauth_connected) && <button className="settings-danger" type="button" onClick={() => setConfirmDisconnect(true)} disabled={actionBusy}>Disconnect</button>}
+    </div>
+    </div>}
+    {aiProvider && <form className="settings-form integration-form" onSubmit={save}>
+        <label>Provider<select aria-label="Provider" value={isFastRouter(values.base_url) ? 'fastrouter' : 'custom'} disabled={actionBusy} onChange={() => {
+          setValues({ base_url: FASTROUTER_URL, model: DEFAULT_AI_MODEL }); setSecretValue('')
+        }}>
+          <option value="fastrouter">FastRouter</option>
+          {!isFastRouter(values.base_url) && <option value="custom" disabled>Existing custom configuration</option>}
+        </select></label>
+        <p><a href="https://fastrouter.ai/" target="_blank" rel="noreferrer">Get a FastRouter API key</a>. Sign in, open your project’s Keys section, and create a key for Watson. Set a spending limit and paste the key below.</p>
+        {credentialField}
+        <details><summary>Advanced settings</summary>{connectionFields}<p>Uses the Anthropic-compatible API. Keep your working endpoint and model unless you need to change them.</p></details>
       <div className="integration-actions">
         <button className="settings-primary" type="submit" disabled={actionBusy}>{busy === 'save' ? 'Saving…' : integration?.configured ? 'Save changes' : 'Save & connect'}</button>
         <button type="button" onClick={test} disabled={actionBusy || !integration?.configured}>{busy === 'test' ? 'Testing…' : 'Test connection'}</button>
-        <button type="button" onClick={importEnv} disabled={actionBusy}>{busy === 'import' ? 'Importing…' : 'Import .env'}</button>
-        {source === 'google-calendar' && <button type="button" onClick={connectGoogle} disabled={actionBusy || Boolean(oauth) || !integration?.credential_present}>{oauth ? 'Waiting for Google…' : integration?.configured ? 'Reconnect Google' : 'Connect Google'}</button>}
-        {integration?.configured && <button className="settings-danger" type="button" onClick={() => setConfirmDisconnect(true)} disabled={actionBusy}>Disconnect</button>}
+        {(integration?.configured || integration?.oauth_connected) && <button className="settings-danger" type="button" onClick={() => setConfirmDisconnect(true)} disabled={actionBusy}>Disconnect</button>}
       </div>
-      {message && <p className={message.includes('could not') || message.includes('needs attention') ? 'settings-error' : 'settings-success'} role="status">{message}</p>}
-    </form>
+    </form>}
+    {message && <p className={message.includes('could not') || message.includes('needs attention') ? 'settings-error' : 'settings-success'} role="status">{message}</p>}
+    {source === 'clickup' && integration?.oauth_connected && !integration?.reauth_required && <ClickUpDestination integration={integration} onChanged={onChanged} />}
     {source === 'gitlab' && integration?.configured && <GitLabProjectSettings />}
     {confirmDisconnect && <div className="settings-modal-backdrop" role="presentation"><div className="settings-modal" role="dialog" aria-modal="true" aria-labelledby={`${source}-disconnect-title`}><h4 id={`${source}-disconnect-title`}>Disconnect {title}?</h4><p>Local work and cached history remain in Watson. Future sync for this integration will stop until you reconnect it.</p><div><button className="settings-danger" type="button" onClick={disconnect} disabled={actionBusy}>{busy === 'disconnect' ? 'Disconnecting…' : 'Disconnect'}</button><button type="button" onClick={() => setConfirmDisconnect(false)} disabled={actionBusy}>Cancel</button></div></div></div>}
   </article>

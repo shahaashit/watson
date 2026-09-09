@@ -147,8 +147,30 @@ class CircuitBreaker:
 _TASK_CIRCUIT_BREAKER = CircuitBreaker()
 
 
+def _request(method, *args, **kwargs):
+    response = getattr(requests, method)(*args, **kwargs)
+    authorization = kwargs.get('headers', {}).get('Authorization', '')
+    if authorization.startswith('Bearer ') and response.status_code == 401:
+        from . import clickup_oauth
+        clickup_oauth.mark_unauthorized(authorization)
+    return response
+
+
 def clickup_config() -> dict:
     """Resolve current ClickUp credentials and the UI-managed task list."""
+    from . import gitlab_oauth
+    try:
+        # Reconnect clears the destination while replacing the credential.
+        # Hold the same reentrant lock across every part of this snapshot.
+        with gitlab_oauth.credential_lock():
+            return _clickup_config_locked()
+    except Exception:
+        return MappingProxyType(
+            {"token": "", "list_ids": (), "create_list_id": ""}
+        )
+
+
+def _clickup_config_locked() -> dict:
     if app_settings.integration_disabled("clickup"):
         return MappingProxyType(
             {"token": "", "list_ids": (), "create_list_id": ""}
@@ -160,6 +182,10 @@ def clickup_config() -> dict:
         token = secret_store.effective_secret(
             "clickup.token", settings.clickup_api_token
         )
+        from . import clickup_oauth
+        oauth_token = clickup_oauth.access_token()
+        if oauth_token is not None:
+            token = oauth_token
     except Exception:
         return MappingProxyType(
             {"token": "", "list_ids": (), "create_list_id": ""}
@@ -229,7 +255,7 @@ def _task_to_cache_row(t: dict) -> dict:
 def get_task(task_id: str, config=None) -> dict:
     """Fetch a single task directly from ClickUp (live)."""
     config = _require_config(config)
-    resp = requests.get(
+    resp = _request("get",
         f"{BASE}/task/{task_id}", headers=_headers(config), timeout=TIMEOUT
     )
     resp.raise_for_status()
@@ -298,7 +324,7 @@ def get_task_resilient(
             response = None
             retry_wait = None
             try:
-                response = requests.get(
+                response = _request("get",
                     f"{BASE}/task/{task_id}", headers=_headers(config), timeout=TIMEOUT
                 )
                 if _retryable_response(response):
@@ -492,7 +518,7 @@ def fetch_tasks(config=None) -> list:
     for list_id in config["list_ids"]:
         page = 0
         while True:
-            resp = requests.get(
+            resp = _request("get",
                 f"{BASE}/list/{list_id}/task",
                 headers=_headers(config),
                 params={"page": page, "include_closed": "false"},
@@ -601,7 +627,7 @@ def current_user_id(config=None):
     token_key = hashlib.sha256(config["token"].encode()).digest()
     if _user_id_cache is not None and _user_id_cache_key == token_key:
         return _user_id_cache
-    resp = requests.get(
+    resp = _request("get",
         f"{BASE}/user",
         headers={"Authorization": config["token"], "Content-Type": "application/json"},
         timeout=TIMEOUT,
@@ -621,7 +647,7 @@ def _closed_status_name(list_id: str, config=None) -> str:
     `Closed` — and only the last is real completion. Falling back on
     orderindex would pick 'abandoned' first, which is wrong."""
     config = _require_config(config)
-    resp = requests.get(
+    resp = _request("get",
         f"{BASE}/list/{list_id}", headers=_headers(config), timeout=TIMEOUT
     )
     resp.raise_for_status()
@@ -641,7 +667,7 @@ def close_task(task_id: str, config=None) -> dict:
     task = get_task(task_id, config)
     list_id = (task.get("list") or {}).get("id")
     status_name = _closed_status_name(list_id, config) if list_id else "closed"
-    resp = requests.put(
+    resp = _request("put",
         f"{BASE}/task/{task_id}", headers=_headers(config),
         json={"status": status_name}, timeout=TIMEOUT,
     )
@@ -652,7 +678,7 @@ def close_task(task_id: str, config=None) -> dict:
 def link_tasks(task_id: str, links_to: str, config=None) -> dict:
     """Create a ClickUp task-link between two tasks (shows in 'Linked' section)."""
     config = _require_config(config)
-    resp = requests.post(
+    resp = _request("post",
         f"{BASE}/task/{task_id}/link/{links_to}",
         headers=_headers(config), timeout=TIMEOUT
     )
@@ -679,7 +705,7 @@ def create_review_task(payload: dict, *, config=None) -> dict:
     labels = body.get("labels") or []
     if labels:
         task["tags"] = [str(tag) for tag in labels]
-    resp = requests.post(
+    resp = _request("post",
         f"{BASE}/list/{list_id}/task",
         headers=_headers(config),
         json=task,
@@ -702,7 +728,7 @@ def execute_action(kind: str, target_id, payload: dict) -> dict:
     if kind == "clickup_comment":
         if not target_id:
             raise ValueError("no target task for comment")
-        resp = requests.post(
+        resp = _request("post",
             f"{BASE}/task/{target_id}/comment",
             headers=_headers(config),
             json={"comment_text": str(draft)},
@@ -711,7 +737,7 @@ def execute_action(kind: str, target_id, payload: dict) -> dict:
     elif kind == "clickup_status":
         if not target_id:
             raise ValueError("no target task for status change")
-        resp = requests.put(
+        resp = _request("put",
             f"{BASE}/task/{target_id}",
             headers=_headers(config),
             json={"status": str(draft)},

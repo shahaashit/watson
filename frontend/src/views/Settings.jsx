@@ -39,7 +39,7 @@ export default function Settings({ initialSection = 'profile' }) {
   }
 
   return <div className="settings-page">
-    <header className="settings-page-header"><div><p className="eyebrow">Settings</p><h1>Watson stays yours to edit.</h1><p>Update your profile, AI provider and integrations, tracked people, Sync, or Data & Backup whenever your work changes. Integration controls can test, reconnect, or Disconnect a local connection.</p></div></header>
+    <header className="settings-page-header"><div><p className="eyebrow">Settings</p><h1>Make Watson yours.</h1><p>Your profile, AI provider and preferences, all in one place. Disconnect or reconnect services whenever you need.</p></div></header>
     <div className="settings-layout"><nav className="settings-nav" aria-label="Settings sections">{SECTIONS.map(([key, label]) => <button type="button" key={key} className={section === key ? 'active' : ''} onClick={() => select(key)}>{label}</button>)}</nav><div className="settings-content">{content()}</div></div>
   </div>
 }

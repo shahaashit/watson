@@ -3,11 +3,11 @@ import json
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from . import app_settings, gitlab_oauth, secret_store
+from . import app_settings, gitlab_oauth, clickup_oauth, secret_store
 
 
 def validate(data):
-    if not isinstance(data, dict) or set(data) - {'version', 'gitlab', 'google_calendar'} or data.get('version') != 1:
+    if not isinstance(data, dict) or set(data) - {'version', 'gitlab', 'google_calendar', 'clickup'} or data.get('version') != 1:
         raise ValueError('Invalid setup file')
     cfg = data.get('gitlab')
     if cfg is not None:
@@ -31,9 +31,12 @@ def validate(data):
             raise ValueError('Unsupported Google OAuth endpoint')
         if any(urlsplit(uri).hostname not in ('localhost', '127.0.0.1', '::1') for uri in installed.get('redirect_uris', [])):
             raise ValueError('Google client must use local redirects')
-    if cfg is None and google is None:
+    clickup = data.get('clickup')
+    if clickup is not None:
+        clickup_oauth.validate_config(clickup)
+    if cfg is None and google is None and clickup is None:
         raise ValueError('No application configuration supplied')
-    return cfg, google
+    return cfg, google, clickup
 
 
 def import_file(conn, path):
@@ -45,13 +48,25 @@ def _import_file(conn, path):
     source = Path(path).expanduser()
     if source.stat().st_size > 65536:
         raise ValueError('Setup file is too large')
-    cfg, google = validate(json.loads(source.read_text()))
+    cfg, google, clickup = validate(json.loads(source.read_text()))
     # Validate the whole file before any changes. Reimports preserve user grants.
     gitlab_oauth.invalidate()
+    if clickup:
+        clickup_oauth.invalidate()
+    previous_clickup = {name:secret_store.get_secret(name) for name in
+        (clickup_oauth.APP_SECRET, clickup_oauth.GRANT_SECRET)} if clickup else {}
     previous_google = secret_store.get_secret('google.client_config') if google else None
     previous_user = secret_store.get_secret('google.authorized_user') if google else None
     try:
         conn.execute('BEGIN')
+        if clickup:
+            previous = previous_clickup[clickup_oauth.APP_SECRET]
+            if previous and json.loads(previous) != clickup:
+                secret_store.delete_secret(clickup_oauth.GRANT_SECRET)
+                app_settings.set_value(conn, 'integration.clickup.oauth_selected', True, commit=False)
+                for key in ('workspace_id', 'space_id', 'create_list_id'):
+                    app_settings.set_value(conn, 'integration.clickup.' + key, '', commit=False)
+            secret_store.set_secret(clickup_oauth.APP_SECRET, json.dumps(clickup))
         if google:
             encoded = json.dumps(google)
             if previous_google and json.loads(previous_google) != google:
@@ -69,6 +84,11 @@ def _import_file(conn, path):
         conn.commit()
     except Exception:
         conn.rollback()
+        for name, old in previous_clickup.items():
+            if old:
+                secret_store.set_secret(name, old)
+            else:
+                secret_store.delete_secret(name)
         if google:
             for name, old in [('google.client_config', previous_google), ('google.authorized_user', previous_user)]:
                 if old:
@@ -76,4 +96,4 @@ def _import_file(conn, path):
                 else:
                     secret_store.delete_secret(name)
         raise
-    return {'gitlab': cfg is not None, 'google_calendar': google is not None}
+    return {'gitlab': cfg is not None, 'google_calendar': google is not None, 'clickup': clickup is not None}

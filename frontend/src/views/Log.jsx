@@ -84,6 +84,7 @@ export default function Log({ initialQuery = '' }) {
 
   return (
     <div className="log-view">
+      <header className="settings-page-header"><p className="eyebrow">Log</p><h1>Your work, in perspective.</h1><p>Find your notes, decisions and updates in one timeline.</p></header>
       <input
         className="search"
         placeholder="Search notes and activity…"

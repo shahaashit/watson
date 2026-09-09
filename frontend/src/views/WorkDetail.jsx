@@ -44,7 +44,7 @@ function CaptureToWork({ workItemId, onCaptured }) {
   }
   return <section className="capture-to-work" aria-labelledby="capture-to-work-title">
     <div className="work-section-heading"><h2 id="capture-to-work-title">Capture to this work</h2></div>
-    <p>Capture is saved to Watson before any optional classification runs.</p>
+    <p>Keep a note or update alongside this work. Your text is saved first, then organized by Watson.</p>
     <form onSubmit={submit}><label className="sr-only" htmlFor="work-capture-text">Capture for this work</label><textarea id="work-capture-text" value={text} onChange={(event) => setText(event.target.value)} placeholder="Capture a note, update, or context for this work…" rows="3" disabled={busy} /><button type="submit" disabled={busy || !text.trim()}>{busy ? 'Capturing…' : 'Capture'}</button></form>
     {message && <p className="work-capture-success" role="status">{message}</p>}
     {error && <p className="work-inline-error" role="alert">{error}</p>}
@@ -99,7 +99,7 @@ export default function WorkDetail({ workItemId }) {
   return <div className="work-detail-page">
     <button type="button" className="back-to-board" onClick={() => navigate(`/${sourceBoard}`)}>← Back to {sourceBoard === 'team' ? 'Team' : 'My Work'}</button>
     {error && <p className="work-inline-error" role="alert">{error}</p>}
-    <header className="work-detail-header"><div><p className="eyebrow">Work workspace</p><h1>{detail.title}</h1>{detail.description && <p className="work-detail-description">{detail.description}</p>}</div></header>
+    <header className="work-detail-header"><div><p className="eyebrow">Work details</p><h1>{detail.title}</h1>{detail.description && <p className="work-detail-description">{detail.description}</p>}</div></header>
     <dl className="work-metadata"><div><dt>Owner</dt><dd>{owner}</dd></div><div><dt>Created</dt><dd>{readableTime(detail.created_at)}</dd></div><div><dt>Updated</dt><dd>{readableTime(detail.updated_at)}</dd></div>{detail.completed_at && <div><dt>Completed</dt><dd>{readableTime(detail.completed_at)}</dd></div>}</dl>
     <div className="work-detail-grid"><div className="work-detail-main">
       <CaptureToWork workItemId={detail.id} onCaptured={() => loadDetail()} />

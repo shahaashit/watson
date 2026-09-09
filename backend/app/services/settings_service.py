@@ -58,7 +58,7 @@ _SOURCE_SETTING_KEYS = {
 _SOURCE_SECRET_KEYS = {
     "anthropic": ("anthropic.api_key",),
     "gitlab": ("gitlab.token", "gitlab.oauth"),
-    "clickup": ("clickup.token",),
+    "clickup": ("clickup.token", "clickup.oauth"),
     "google-calendar": ("google.client_config", "google.authorized_user"),
     "flock": (),
 }
@@ -259,12 +259,18 @@ def _gitlab_view(conn, fallback: Settings) -> dict:
 
 
 def _clickup_view(conn, fallback: Settings) -> dict:
+    from . import clickup_oauth
+    oauth = clickup_oauth.view(conn)
     create_list_id = _effective(
         conn, "integration.clickup.create_list_id", fallback.clickup_create_list
     )
     credential_present, effective_token, unavailable = _secret_state(
         "clickup.token", fallback.clickup_api_token
     )
+    if app_settings.get(conn, 'integration.clickup.oauth_selected', False):
+        # Runtime deliberately blocks PAT fallback after OAuth selection,
+        # including when the personal grant is missing.
+        effective_token = ''
     return {
         "source": "clickup",
         "create_list_id": create_list_id,
@@ -273,12 +279,13 @@ def _clickup_view(conn, fallback: Settings) -> dict:
             for key, value in _common_view(
                 conn,
                 "clickup",
-                credential_present=credential_present,
-                configured=bool(create_list_id and effective_token),
+                credential_present=credential_present or oauth['oauth_connected'],
+                configured=bool(create_list_id and (effective_token or oauth['oauth_connected'])) and not oauth['reauth_required'],
                 credential_unavailable=unavailable,
             ).items()
             if key != "source"
         },
+        **oauth,
     }
 
 
@@ -842,10 +849,22 @@ def _update_integration(
     except KeyError:
         raise ValueError("unsupported integration source") from None
     secret_updates = _payload_secret_updates(source, payload)
+    secret_updates.update(extra_secret_updates or {})
+    if source == 'clickup':
+        from . import clickup_oauth
+        # Manual saves may retain an OAuth destination, but changing it must
+        # go through the Workspace/Space/List verification route. Validate
+        # before invalidating sessions or persisting the disabled tombstone.
+        if ('clickup.token' not in secret_updates
+                and (app_settings.get(conn, 'integration.clickup.oauth_selected', False)
+                     or secret_store.has_secret('clickup.oauth'))
+                and payload.create_list_id != app_settings.get(
+                    conn, 'integration.clickup.create_list_id', '')):
+            raise ValueError('Use the verified ClickUp destination selection to change the List.')
+        clickup_oauth.invalidate()
     if source == 'gitlab':
         from . import gitlab_oauth
         gitlab_oauth.invalidate()
-    secret_updates.update(extra_secret_updates or {})
     _persist_disabled_tombstone(conn, source)
     try:
         conn.execute("BEGIN")
@@ -858,6 +877,11 @@ def _update_integration(
         if source == 'gitlab' and 'gitlab.token' in secret_updates:
             secret_store.delete_secret('gitlab.oauth')
             app_settings.delete(conn, 'integration.gitlab.pat_blocked', commit=False)
+        if source == 'clickup' and 'clickup.token' in secret_updates:
+            secret_store.delete_secret('clickup.oauth')
+            app_settings.delete(conn, 'integration.clickup.oauth_selected', commit=False)
+            for key in ('workspace_id', 'space_id'):
+                app_settings.delete(conn, 'integration.clickup.' + key, commit=False)
         # Even a host-only edit must prove the existing credential store is
         # readable before it can pair new non-secrets with an old credential.
         for name in _SOURCE_SECRET_KEYS[source]:
@@ -883,6 +907,9 @@ def disconnect_integration(conn, source: str) -> dict:
 def _disconnect_integration(conn, source: str) -> dict:
     if source not in SOURCES:
         raise ValueError("unsupported integration source")
+    if source == 'clickup':
+        from . import clickup_oauth
+        clickup_oauth.invalidate()
     if source == 'gitlab':
         from . import gitlab_oauth
         gitlab_oauth.invalidate()

@@ -1,7 +1,7 @@
 """Permanent Settings and onboarding HTTP API."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from ..db import get_db
 from ..schemas import (
@@ -126,6 +126,68 @@ def gitlab_connect_status(session_id: str):
         return gitlab_oauth.status(session_id)
     except KeyError:
         raise HTTPException(404, 'OAuth session not found.') from None
+
+
+@router.post('/settings/integrations/clickup/connect', status_code=202)
+def connect_clickup(conn=Depends(get_db)):
+    from ..services import clickup_oauth
+    try:
+        return clickup_oauth.start(conn)
+    except Exception:
+        raise HTTPException(409, 'Could not start ClickUp sign-in. Check setup and local port 18766.') from None
+
+
+@router.get('/settings/integrations/clickup/connect/{session_id}')
+def clickup_connect_status(session_id: str):
+    from ..services import clickup_oauth
+    try:
+        return clickup_oauth.status(session_id)
+    except KeyError:
+        raise HTTPException(404, 'OAuth session not found.') from None
+
+
+@router.get('/settings/integrations/clickup/workspaces')
+def clickup_workspaces(conn=Depends(get_db)):
+    from ..services import clickup_oauth, app_settings
+    try:
+        return {'workspaces':clickup_oauth.workspaces(),
+                'selected_workspace_id':app_settings.get(conn, 'integration.clickup.workspace_id', '')}
+    except Exception:
+        raise HTTPException(502, 'Could not load ClickUp Workspaces. Check your connection and permissions.') from None
+
+
+@router.get('/settings/integrations/clickup/workspaces/{workspace_id}/spaces')
+def clickup_spaces(workspace_id: str):
+    from ..services import clickup_oauth
+    try:
+        return {'spaces':clickup_oauth.spaces(workspace_id)}
+    except Exception:
+        raise HTTPException(502, 'Could not load ClickUp Spaces. Check Workspace authorization.') from None
+
+
+@router.get('/settings/integrations/clickup/workspaces/{workspace_id}/spaces/{space_id}/lists')
+def clickup_lists(workspace_id: str, space_id: str):
+    from ..services import clickup_oauth
+    try:
+        return {'lists':clickup_oauth.lists(workspace_id, space_id)}
+    except Exception:
+        raise HTTPException(502, 'Could not load ClickUp Lists. Check Space access and retry.') from None
+
+
+class ClickUpDestinationIn(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    workspace_id: str = Field(pattern=r'^[0-9]+$', max_length=30)
+    space_id: str = Field(pattern=r'^[0-9]+$', max_length=30)
+    list_id: str = Field(pattern=r'^[0-9]+$', max_length=30)
+
+
+@router.post('/settings/integrations/clickup/destination')
+def clickup_destination(payload: ClickUpDestinationIn, conn=Depends(get_db)):
+    from ..services import clickup_oauth
+    try:
+        return clickup_oauth.save_destination(conn, payload.workspace_id, payload.space_id, payload.list_id)
+    except Exception:
+        raise HTTPException(400, 'Could not save destination. Select an authorized Workspace, Space and List.') from None
 
 
 @router.delete("/settings/integrations/{source}")

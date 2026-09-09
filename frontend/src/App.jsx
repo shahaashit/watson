@@ -39,14 +39,6 @@ export default function App() {
     if (!onboarding.completed && route.view !== 'onboarding') navigate('/onboarding')
     if (onboarding.completed && route.view === 'onboarding') navigate('/my-work')
   }, [onboarding, onboardingError, onboardingLoading, route.view])
-  useEffect(() => {
-    const onMove = (event) => {
-      document.documentElement.style.setProperty('--mx', `${event.clientX}px`)
-      document.documentElement.style.setProperty('--my', `${event.clientY}px`)
-    }
-    window.addEventListener('pointermove', onMove, { passive: true })
-    return () => window.removeEventListener('pointermove', onMove)
-  }, [])
 
   const setView = useCallback((view) => {
     const target = VIEWS.find((item) => item.key === view)
@@ -71,10 +63,9 @@ export default function App() {
 
   return <div className="app">
     <ConnectionNotice />
-    <div className="cursor-glow" aria-hidden="true" />
     <nav className="nav" aria-label="Primary navigation">
       <button className="brand" onClick={() => setView('my-work')} aria-label="Watson home">
-        <svg className="brand-mark" viewBox="0 0 32 32" width="22" height="22" aria-hidden="true"><defs><linearGradient id="brand-grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#9d8cff" /><stop offset="55%" stopColor="#ff5fd2" /><stop offset="100%" stopColor="#53d4ff" /></linearGradient></defs><path d="M 6 9 L 11 23 L 16 15 L 21 23 L 26 9" fill="none" stroke="url(#brand-grad)" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        <svg className="brand-mark" viewBox="0 0 32 32" width="22" height="22" aria-hidden="true"><path d="M 6 9 L 11 23 L 16 15 L 21 23 L 26 9" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
         <span className="brand-text">Watson</span>
       </button>
       {VIEWS.map((view) => <button key={view.key} className={`nav-btn ${route.view === view.key ? 'active' : ''}`} onClick={() => navigate(view.path)}>{view.label}</button>)}

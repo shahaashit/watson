@@ -290,7 +290,8 @@ def assert_no_horizontal_overflow(page, label: str) -> None:
 def run_browser_checks(ids: dict[str, int]) -> None:
     from playwright.sync_api import sync_playwright
 
-    routes = ["/my-work", "/team", f"/work/{ids['mine']}", "/settings", "/log"]
+    routes = ["/my-work", "/team", f"/work/{ids['mine']}", "/settings", "/log",
+              "/settings/integrations", "/settings/people", "/settings/sync", "/settings/data"]
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         try:
@@ -310,9 +311,29 @@ def run_browser_checks(ids: dict[str, int]) -> None:
                     assert page.evaluate(
                         "getComputedStyle(document.documentElement).fontSize"
                     ) == "18px", "Watson should use the approved larger base type"
+                    assert page.evaluate(
+                        "getComputedStyle(document.documentElement).colorScheme"
+                    ) == "light", "All views should use the light theme"
                 assert page.locator(".nav-btn").all_inner_texts() == [
                     "My Work", "Team", "Log"
                 ], "review automation must not add a navigation tab"
+
+                page.goto(f"{BASE_URL}/settings/integrations", wait_until="networkidle")
+                ai_card = page.locator('.integration-settings-card[data-provider="anthropic"]')
+                assert ai_card.get_by_label('Provider', exact=True).input_value() == 'fastrouter'
+                assert ai_card.get_by_role('link', name='Get a FastRouter API key').get_attribute('href') == 'https://fastrouter.ai/'
+                assert ai_card.locator('textarea').is_visible(), 'API key must not be hidden under Advanced'
+                assert not ai_card.get_by_label('Base URL', exact=True).is_visible()
+                ai_card.get_by_text('Advanced settings', exact=True).click()
+                ai_card.get_by_label('Base URL', exact=True).fill('https://gateway.example.com')
+                assert ai_card.get_by_label('Provider', exact=True).input_value() == 'custom'
+                assert ai_card.locator('textarea').evaluate('(element) => element.required')
+                ai_card.locator('textarea').fill('   ')
+                ai_card.locator('button[type="submit"]').click()
+                assert ai_card.get_by_role('status').inner_text() == 'Enter a valid API key before saving a new connection or changing the endpoint.'
+                ai_card.get_by_label('Provider', exact=True).select_option('fastrouter')
+                assert ai_card.get_by_label('Base URL', exact=True).input_value() == 'https://go.fastrouter.ai'
+                assert_no_horizontal_overflow(page, f'AI setup at {width}px')
 
                 page.goto(f"{BASE_URL}/my-work", wait_until="networkidle")
                 page.wait_for_selector(".work-card", timeout=5000)
@@ -353,6 +374,20 @@ def run_browser_checks(ids: dict[str, int]) -> None:
                 for lane_name in ("Alex Chen", "Blair Lee", "Others", "Unassigned"):
                     assert page.get_by_role("heading", name=lane_name).count() == 1
                 scrolls = page.locator(".person-lane-scroll")
+                separation = page.locator('.person-lane-card .work-card').first.evaluate("""card => {
+                    const luminance = color => {
+                        const rgb = color.match(/[\\d.]+/g).slice(0, 3).map(Number).map(v => {
+                            v /= 255; return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4;
+                        });
+                        return rgb[0] * .2126 + rgb[1] * .7152 + rgb[2] * .0722;
+                    };
+                    const style = getComputedStyle(card);
+                    const lane = getComputedStyle(card.closest('.person-lane'));
+                    const a = luminance(style.backgroundColor), b = luminance(lane.backgroundColor);
+                    return { contrast: (Math.max(a,b)+.05)/(Math.min(a,b)+.05), shadow: style.boxShadow };
+                }""")
+                assert separation['contrast'] >= 1.2, 'Task cards should stand apart from the lane background'
+                assert separation['shadow'] != 'none', 'Task cards should have subtle depth'
                 assert scrolls.count() >= 4
                 assert all(
                     scrolls.nth(index).evaluate("node => getComputedStyle(node).overflowY") == "auto"
@@ -387,7 +422,7 @@ def run_browser_checks(ids: dict[str, int]) -> None:
                 page.wait_for_url(f"{BASE_URL}/my-work")
 
                 page.goto(f"{BASE_URL}/settings", wait_until="networkidle")
-                page.get_by_role("heading", name="Watson stays yours to edit.").wait_for()
+                page.get_by_role("heading", name="Make Watson yours.").wait_for()
                 assert page.get_by_label("Display name").is_editable()
                 create_reviews = page.get_by_role(
                     "checkbox", name="Create ClickUp review tasks automatically"

@@ -88,11 +88,11 @@ export default function SyncDataSettings({ data, compact = false, mode = 'both' 
       const response = await api.syncAll()
       if (!mountedRef.current || generation !== pollGenerationRef.current) return
       if (response?.skipped === 'already_running') {
-        setMessage('Another sync is already running. Watching its local status…')
+        setMessage('Another sync is already running. Checking progress…')
         const status = await pollUntilIdle(generation)
         if (!mountedRef.current || generation !== pollGenerationRef.current) return
         if (status && !status.running) setMessage('The existing sync finished.')
-        else setMessage('Sync is still running. Check its cached status again shortly.')
+        else setMessage('Sync is still running. Check back shortly.')
       } else {
         setMessage('Sync finished.')
         await loadHealth(generation)
@@ -117,6 +117,7 @@ export default function SyncDataSettings({ data, compact = false, mode = 'both' 
     finally { if (mountedRef.current && generation === pollGenerationRef.current) setRetryingSource('') }
   }
   const saveBackup = async (event) => {
+    // This changes the backup destination, never the location of the live SQLite database.
     event.preventDefault()
     if (saving || !backupDir.trim()) return
     setSaving(true); setMessage('')
@@ -127,10 +128,10 @@ export default function SyncDataSettings({ data, compact = false, mode = 'both' 
 
   return <div className={`sync-data-settings${compact ? ' settings-compact' : ''}`}>
     {mode !== 'data' && <section className="settings-section sync-settings" aria-labelledby="sync-settings-title">
-      <div className="settings-section-heading"><div><p className="eyebrow">Sync</p><h2 id="sync-settings-title">Cached sources</h2><p>Sync refreshes local caches. It never applies external writes without your approval.</p></div><button className="settings-primary" type="button" onClick={syncAll} disabled={syncing || retryingSource}>{syncing ? 'Syncing…' : 'Sync now'}</button></div>
-      {loadingHealth ? <p className="settings-muted">Loading source health…</p> : <div className="sync-source-list">{sources.length ? sources.map((source) => <div className="sync-source-row" key={source.source}><div><strong>{sourceName(source.source)}</strong><p>{source.message || sourceState(source)}</p>{source.last_success_at && <time dateTime={source.last_success_at}>Last cached {new Date(source.last_success_at).toLocaleString()}</time>}</div><div><span className={`integration-state ${source.status === 'healthy' ? 'configured' : ''}`}>{sourceState(source)}</span>{source.status === 'degraded' && <button type="button" onClick={() => retry(source.source)} disabled={syncing || retryingSource}>{retryingSource === source.source ? 'Retrying…' : 'Retry'}</button>}</div></div>) : <p className="settings-muted">No source status has been cached yet. Manual local work still works.</p>}</div>}
+      <div className="settings-section-heading"><div><p className="eyebrow">Sync</p><h2 id="sync-settings-title">Connected services</h2><p>Refresh the work and updates available in Watson.</p></div><button className="settings-primary" type="button" onClick={syncAll} disabled={syncing || retryingSource}>{syncing ? 'Syncing…' : 'Sync now'}</button></div>
+      {loadingHealth ? <p className="settings-muted">Checking connections…</p> : <div className="sync-source-list">{sources.length ? sources.map((source) => <div className="sync-source-row" key={source.source}><div><strong>{sourceName(source.source)}</strong><p>{source.message || sourceState(source)}</p>{source.last_success_at && <time dateTime={source.last_success_at}>Last updated {new Date(source.last_success_at).toLocaleString()}</time>}</div><div><span className={`integration-state ${source.status === 'healthy' ? 'configured' : ''}`}>{sourceState(source)}</span>{source.status === 'degraded' && <button type="button" onClick={() => retry(source.source)} disabled={syncing || retryingSource}>{retryingSource === source.source ? 'Retrying…' : 'Retry'}</button>}</div></div>) : <p className="settings-muted">No updates yet. You can still add work and notes.</p>}</div>}
     </section>}
-    {mode !== 'sync' && <section className="settings-section data-settings" aria-labelledby="data-settings-title"><div className="settings-section-heading"><div><p className="eyebrow">Data & Backup</p><h2 id="data-settings-title">Keep the live SQLite database local</h2><p>Watson’s live SQLite database stays on this Mac. The backup destination is a separate folder for daily snapshots and journal exports.</p></div></div><form className="settings-form" onSubmit={saveBackup}><label>Backup destination<input value={backupDir} onChange={(event) => setBackupDir(event.target.value)} placeholder="/Volumes/Drive/watson" disabled={saving} required /></label><div className="settings-form-actions"><button className="settings-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save backup destination'}</button></div></form></section>}
+    {mode !== 'sync' && <section className="settings-section data-settings" aria-labelledby="data-settings-title"><div className="settings-section-heading"><div><p className="eyebrow">Data & Backup</p><h2 id="data-settings-title">Keep your work backed up</h2><p>Your work stays on this Mac. Choose a separate folder for daily backups and exported notes.</p></div></div><form className="settings-form" onSubmit={saveBackup}><label>Backup destination<input value={backupDir} onChange={(event) => setBackupDir(event.target.value)} placeholder="/Volumes/Drive/watson" disabled={saving} required /></label><div className="settings-form-actions"><button className="settings-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save backup destination'}</button></div></form></section>}
     {message && <p className={message.includes('Could not') || message.includes('could not') ? 'settings-error' : 'settings-success'} role="status">{message}</p>}
   </div>
 }

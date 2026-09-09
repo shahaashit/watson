@@ -56,8 +56,10 @@ PIP_ARGS=()
 [[ -n "${PIP_TRUSTED_HOST:-}" ]] && PIP_ARGS+=(--trusted-host "$PIP_TRUSTED_HOST")
 
 echo "==> Installing backend dependencies"
-"$VENV/bin/python" -m pip install --upgrade pip "${PIP_ARGS[@]}"
-"$VENV/bin/python" -m pip install -r "$ROOT/backend/requirements.txt" "${PIP_ARGS[@]}"
+# Bash 3.2 treats an empty array as unset under nounset. Expand it only when
+# populated, preserving each argument without passing an empty string to pip.
+"$VENV/bin/python" -m pip install --upgrade pip ${PIP_ARGS[@]+"${PIP_ARGS[@]}"}
+"$VENV/bin/python" -m pip install -r "$ROOT/backend/requirements.txt" ${PIP_ARGS[@]+"${PIP_ARGS[@]}"}
 
 if "$VENV/bin/python" -c 'import playwright' >/dev/null 2>&1; then
   echo "==> Installing Chromium for optional local-browser integrations"

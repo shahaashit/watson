@@ -6,7 +6,7 @@ live SQLite database on your Mac.
 
 The app has three primary views:
 
-- **My Work** — your four local states: Today, Next, Waiting, and Done.
+- **My Work** — your work, linked tasks and merge requests, notes, and local priority.
 - **Team** — explicit tracked-person lanes plus permanent Others and
   Unassigned lanes. Each lane scrolls inside its card.
 - **Log** — searchable work activity, captures, decisions, and approvals.
@@ -17,11 +17,17 @@ and backup location. Everything remains editable later.
 
 ## Install on macOS
 
-Requirements: macOS, Python 3.10 or newer, and Node 18 or newer.
+Requirements: macOS, Git, Python 3.10 or newer, and Node 18 or newer with npm.
+Install these prerequisites before running the installer. Windows and Linux
+are not supported by the current installer and macOS Keychain integration.
+
+While the repository is private, the owner must invite you as a collaborator;
+accept that invitation and authenticate Git with your own GitHub account.
+Clone into a permanent local folder: the service runs from this checkout.
 
 ```bash
-git clone <your-watson-repository-url>
-cd Watson
+git clone https://github.com/shahaashit/watson.git
+cd watson
 ./scripts/install.sh
 ```
 
@@ -36,14 +42,102 @@ If a network uses private package mirrors, create a local, uncommitted
 generic reference. Existing installations may instead use **Import .env** in
 Settings; that is an explicit migration action, not the default setup path.
 
+## First launch and integrations
+
+The installer opens [onboarding](http://127.0.0.1:8000/onboarding). You can skip
+integrations and configure them later in Settings. An AI provider is needed
+for classification, Ask, and AI review grouping; manual work and notes do not
+require one. No coding-agent application is required to run Watson.
+
+1. **Profile:** save your name, timezone (for example `Europe/London`), and
+   email domain. Replace `example.com` with the domain used by your team.
+   Review task creation and AI grouping are independently enabled by default;
+   disable either checkbox before connecting integrations if you do not want it.
+2. **Integrations:** save your own connection details using the table below,
+   then use **Test connection**. GitLab also needs a saved repository selection.
+3. **People:** add each teammate's display name and identifier. The identifier
+   is their GitLab username; Watson combines it with the profile email domain
+   for email identities. This assumes their email local part matches that username.
+4. **Ready:** choose your own backup folder, run **Sync now**, check the source
+   health, and click **Start using Watson**. Save each form before continuing.
+
+| Integration | What you supply | Steps outside Watson |
+|---|---|---|
+| AI provider | Anthropic-compatible API key, available model, and optional gateway base URL | Obtain your own API credentials from your provider or administrator. |
+| GitLab | Instance base URL, personal access token, optional username; select repositories after saving | Create a personal token with `read_api` for collection. GitLab write actions, such as removing yourself as reviewer, need `api`. Your account must have access to the selected projects. |
+| ClickUp | Personal API token and destination **Create-list ID** | Generate your own token and choose a list where you can create tasks. A successful connection check does not prove permission to create in that list. |
+| Google Calendar (optional) | OAuth Desktop client configuration JSON, pasted into the field | Prepare the client in Google Cloud, then authorize your Google account in the browser opened by **Connect Google**. |
+| Flock (optional) | Dedicated browser profile directory and your Flock handle | Run the one-time login command below and sign in using your own account. |
+
+For token creation, see [GitLab personal tokens](https://docs.gitlab.com/user/profile/personal_access_tokens/)
+and [token scopes](https://docs.gitlab.com/security/tokens/access_token_scopes/),
+and [ClickUp personal-token authentication](https://developer.clickup.com/docs/authentication).
+For a ClickUp list ID, open the intended List in ClickUp and inspect its URL;
+use the list identifier, not a task, folder, workspace, or view identifier.
+Private GitLab instances may require your organization's network or VPN.
+
+### Google Calendar setup
+
+Follow Google's [Desktop OAuth setup guide](https://developers.google.com/workspace/calendar/api/quickstart/python):
+enable the Google Calendar API in your Google Cloud project, configure the
+consent screen (and test users if applicable), create an OAuth client of type
+**Desktop app**, and download its JSON. Paste the JSON into Watson's Google
+Calendar field and save it. Click **Connect Google** and complete authorization
+in the browser, then test the connection. You do not need to run Google's
+sample application or copy its code into Watson.
+
+Watson requests `calendar.events`, which allows reading and writing calendar
+events. Account or organization policy may require administrator approval.
+Watson stores the client configuration and resulting authorization in Keychain;
+no OAuth JSON file needs to be placed in the repository.
+
+### Flock setup
+
+After saving Flock settings, run this from the repository root:
+
+```bash
+(cd backend && .venv/bin/python -m app.auth.flock)
+```
+
+Sign in in the browser that opens, wait until the chat sidebar loads, then
+return to the terminal and press **Enter** to save the session. Let Watson
+close that window. Use **Test connection** and **Sync now** afterward. The
+default dedicated profile is `~/.watson/chrome-profile-flock`; use a separate
+profile rather than your everyday browser profile. If the session expires,
+repeat the login. This login is currently a terminal step, not an onboarding button.
+
+## Sharing and required files
+
+Share the GitHub repository link and grant access while it is private. A fresh
+clone contains all application code, prompts, dependency manifests, and install
+scripts. **No files from the original developer's machine need to be sent
+separately.** Each recipient supplies their own credentials and starts with
+their own empty local database.
+
+| Files or data | Where they come from |
+|---|---|
+| `backend/`, `frontend/`, `scripts/`, README, `.env.example` | Included in the clone. Keep the checkout in place while the service runs. |
+| `backend/.venv/`, `frontend/node_modules/`, `frontend/dist/` | Generated by the installer. |
+| `~/.watson/watson.db`, `~/.watson/server.log` | Created locally by Watson. |
+| `~/Library/LaunchAgents/com.watson.local.plist` | Generated by the installer for that user's checkout. |
+| API keys and Google OAuth credentials | Supplied by the recipient and stored in macOS Keychain. |
+| Flock browser session | Created by the recipient's one-time login. |
+| `.watson-install.env` | Optional, created locally only for a private package mirror. |
+
+Do not send your `.env`, `.npmrc`, `.watson-install.env`, live database, backups,
+logs, OAuth files, Keychain credentials, or browser profiles. Share through GitHub
+instead of zipping your working directory, which can contain ignored private files.
+The `.env.example` template is optional; normal onboarding does not require
+creating or importing an `.env` file.
+
 ## Private configuration and approval boundary
 
 Set up Anthropic-compatible capture/Ask, GitLab, ClickUp, Google Calendar, and
 optional Flock from Settings. Token and OAuth fields are write-only and stored
 in macOS Keychain. The UI shows only whether a credential is present.
 
-Watson can be useful with no integrations: add local work manually, move it
-between the four states, keep notes, and use the Log. A pasted GitLab MR or
+Watson can be useful with no integrations: add and prioritize local work,
+keep notes, and use the Log. A pasted GitLab MR or
 ClickUp task link can be imported manually. GitLab collection may also discover
 ClickUp work when a branch has `_clickup<id>` (for example
 `feature/cleanup_clickup86abc1234`); Watson fetches that exact task instead of
@@ -51,7 +145,7 @@ performing broad recurring ClickUp scans.
 
 ClickUp comments, task updates, closures, and ordinary task creation are always
 drafts that require **Approve**. Automatic creation of `Review - …` tasks is a
-separate, opt-in setting (enabled by default) and is idempotent; it can be
+separate setting, enabled by default with an option to disable it, and is idempotent; it can be
 disabled from the profile. Dragging or reordering never changes an external
 assignee, priority, or status.
 
@@ -91,6 +185,33 @@ rm -f ~/Library/LaunchAgents/com.watson.local.plist
 
 For active frontend development, `./scripts/dev.sh` runs Vite on port 5173.
 Do not run it alongside the LaunchAgent on port 8000.
+
+## Troubleshooting a new installation
+
+- **Clone says repository not found:** accept the collaborator invitation and
+  check that Git is authenticated as the invited account.
+- **Missing Python or Node:** check `python3 --version`, `node --version`, and
+  `npm --version` in the terminal running the installer, then install the missing prerequisite.
+- **Dependency download fails:** confirm access to the package registries and
+  Playwright browser downloads. If your network needs a mirror, use the optional
+  `.watson-install.env` settings described above and rerun `./scripts/install.sh`.
+- **Port 8000 is occupied:** inspect with `lsof -nP -iTCP:8000 -sTCP:LISTEN`.
+  Stop or reconfigure the application you recognize as using it, then rerun the
+  installer. Watson's installer refuses to stop an unrelated service.
+- **Browser does not open or service does not start:** open
+  `http://127.0.0.1:8000/onboarding` manually. Inspect
+  `launchctl print gui/$(id -u)/com.watson.local` and `~/.watson/server.log`.
+  If you moved the checkout, rerun the installer from its new location.
+- **Keychain unavailable:** unlock your macOS login Keychain, address any
+  access prompt, and retry saving the integration. If a token is expired,
+  replace it in Settings and test the connection.
+- **No MRs or review tasks:** confirm GitLab repository selection and access,
+  ClickUp destination list and permissions, and the review-creation checkbox;
+  run Sync now and inspect source health and Log.
+- **Google authorization fails:** verify the Desktop OAuth client, enabled
+  Calendar API, and account/test-user permissions, then use Connect/Reconnect Google.
+- **Flock needs attention:** repeat the terminal login above using the same
+  dedicated profile configured in Settings.
 
 ## Verify a checkout
 

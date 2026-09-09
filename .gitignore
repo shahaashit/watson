@@ -1,5 +1,6 @@
 .env
 .npmrc
+.watson-install.env
 __pycache__/
 *.pyc
 .venv/

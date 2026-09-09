@@ -306,14 +306,31 @@ def retire_missing_gitlab_work(conn) -> int:
 
 
 def linked_clickup_ids(conn) -> list[str]:
-    """All ClickUp task IDs currently linked to local work, once and stable."""
-    return [
-        row["external_id"]
-        for row in conn.execute(
-            "SELECT DISTINCT external_id FROM work_links WHERE source_type='clickup' "
-            "ORDER BY external_id COLLATE NOCASE, external_id"
-        )
-    ]
+    """Refresh active, in-scope work without discarding historical links.
+
+    Manual imports remain explicit opt-ins. Discovered work must still involve
+    the user or a tracked teammate in the connector caches; legacy migrated
+    work is scoped by its local owner.
+    """
+    rows = conn.execute(
+        "SELECT wi.*, wl.external_id, p.is_self, p.is_tracked FROM work_items wi "
+        "JOIN work_links wl ON wl.work_item_id=wi.id AND wl.source_type='clickup' "
+        "LEFT JOIN people p ON p.id=wi.owner_person_id "
+        "WHERE wi.state != 'done' AND wi.completed_at IS NULL "
+        "AND wi.origin != 'ignored' "
+        "ORDER BY wl.external_id COLLATE NOCASE, wl.external_id"
+    ).fetchall()
+    ids = []
+    for row in rows:
+        if row["origin"] == "manual":
+            relevant = True
+        elif row["origin"] == "discovery":
+            relevant = work_items._discovery_is_team_relevant(conn, row)
+        else:
+            relevant = bool(row["is_self"] or row["is_tracked"])
+        if relevant and row["external_id"] not in ids:
+            ids.append(row["external_id"])
+    return ids
 
 
 def reconcile_clickup_titles(conn) -> int:

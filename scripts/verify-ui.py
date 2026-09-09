@@ -460,41 +460,34 @@ def run_browser_checks(ids: dict[str, int]) -> None:
                 assert_no_horizontal_overflow(page, f'AI setup at {width}px')
 
                 page.goto(f"{BASE_URL}/my-work", wait_until="networkidle")
-                page.wait_for_selector(".work-card", timeout=5000)
-                assert page.locator(".work-card").count() >= 2, "My Work should contain real local work"
+                page.wait_for_selector(".personal-task-row", timeout=5000)
+                assert page.locator(".personal-task-row").count() >= 2, "My Work should contain real personal work"
                 assert page.get_by_role(
                     "button", name="Open Review - Semantic rollout (Alex Chen)"
-                ).count() == 1, "two related review MRs should render as one grouped card"
-                assert page.get_by_role("heading", name="Priority").count() == 1
+                ).count() == 0, "review tracking belongs outside My Work"
+                assert page.get_by_role("heading", name="My tasks").count() == 1
+                assert page.locator('a[href="https://app.clickup.com/t/86d3sample"]').count() == 1
                 assert page.locator(".work-card-state").count() == 0
-                my_title_style = page.locator(".work-card-title").first.evaluate(
+                my_title_style = page.locator(".personal-task-title").first.evaluate(
                     "node => ({ clamp: getComputedStyle(node).webkitLineClamp, whiteSpace: getComputedStyle(node).whiteSpace })"
                 )
-                assert my_title_style == {"clamp": "2", "whiteSpace": "normal"}
+                assert my_title_style == {"clamp": "3", "whiteSpace": "normal"}
                 assert "Historical completed sample" not in page.locator("body").inner_text()
                 assert page.locator(".schedule-strip").count() == 1, "My Work should keep a compact schedule"
-                suggestions = page.get_by_role("region", name="Watson suggestions")
-                assert suggestions.count() == 1
-                for label in (
-                    "Merge",
-                    "Keep separate",
-                    "Retry",
-                    "Close task",
-                ):
-                    assert suggestions.get_by_text(label, exact=True).count() == 1, (
-                        f"Watson suggests should expose {label!r} exactly once"
-                    )
-                assert suggestions.get_by_text(
-                    "Check ClickUp before resolving. Watson will not retry an uncertain external write.",
-                    exact=True,
-                ).count() == 1
+                assert page.get_by_role("region", name="Watson suggestions").count() == 0
+                assert page.locator('.work-inbox, .integration-health-toggle').count() == 0
+                assert page.get_by_role('button', name='Open Blair’s MR context').count() == 0, 'Team-owned work must stay outside My Work'
+                assert page.get_by_role('button', name='Refresh now', exact=True).count() == 0
+                page.get_by_role('button', name='Open utility menu').click()
+                assert page.get_by_role('menuitem', name='Sync now Refresh connected services').count() == 1
+                page.get_by_role('button', name='Open utility menu').click()
                 page.locator(".nav-add-work").click()
                 page.get_by_role("button", name="Import link").click()
                 assert page.get_by_label("GitLab MR or ClickUp task URL").is_editable(), "manual external import must be reachable"
-                page.locator(".integration-health-toggle").click()
-                assert page.get_by_text("Cached work is available. Retry from Settings.").count() == 1
+                assert page.locator('.sync-status-strip').count() == 1
 
                 page.goto(f"{BASE_URL}/team", wait_until="networkidle")
+                assert page.get_by_role('button', name='Refresh', exact=True).count() == 0
                 for lane_name in ("Alex Chen", "Blair Lee", "Others", "Unassigned"):
                     assert page.get_by_role("heading", name=lane_name).count() == 1
                 scrolls = page.locator(".person-lane-scroll")

@@ -519,13 +519,31 @@ def my_work(
     _validate_owner(conn, self_person_id)
     result = {state: [] for state in ("today", "next", "waiting", "done")}
     rows = conn.execute(
-        "SELECT * FROM work_items WHERE owner_person_id=? ORDER BY priority_position, id",
+        "SELECT wi.* FROM work_items wi WHERE wi.owner_person_id=? "
+        "AND NOT EXISTS(SELECT 1 FROM review_groups rg WHERE rg.work_item_id=wi.id) "
+        "AND NOT EXISTS(SELECT 1 FROM work_links wl JOIN managed_tasks mt "
+        "ON mt.clickup_task_id=wl.external_id WHERE wl.work_item_id=wi.id "
+        "AND wl.source_type='clickup' AND lower(mt.category)='review') "
+        "ORDER BY wi.priority_position, wi.id",
         (self_person_id,),
     ).fetchall()
+    clickup_urls = {}
+    for link in conn.execute(
+        "SELECT wl.work_item_id, wl.external_id FROM work_links wl "
+        "JOIN work_items wi ON wi.id=wl.work_item_id "
+        "WHERE wi.owner_person_id=? AND wl.source_type='clickup' "
+        "ORDER BY EXISTS(SELECT 1 FROM managed_tasks mt WHERE mt.clickup_task_id=wl.external_id) DESC, wl.id",
+        (self_person_id,),
+    ):
+        task_id = link['external_id']
+        if task_id and task_id.isascii() and task_id.isalnum():
+            clickup_urls.setdefault(link['work_item_id'], f'https://app.clickup.com/t/{task_id}')
+    def personal_item(row):
+        return {**work_item_dict(row), 'clickup_url': clickup_urls.get(row['id'], '')}
     for row in rows:
         if row["state"] != "done" or _completed_today(row["completed_at"], timezone_name):
-            result[row["state"]].append(work_item_dict(row))
-    active = [work_item_dict(row) for row in rows if row["state"] != "done"]
+            result[row["state"]].append(personal_item(row))
+    active = [personal_item(row) for row in rows if row["state"] != "done"]
     result["mode"] = "segregated" if separate_by_status else "flat"
     result["items"] = active
     return result

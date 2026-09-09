@@ -2,13 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api.js'
 import { navigate } from '../routing.js'
 import Markdown from '../components/Markdown.jsx'
-import IntegrationHealth from '../components/IntegrationHealth.jsx'
 import ScheduleStrip from '../components/ScheduleStrip.jsx'
-import WorkInbox from '../components/WorkInbox.jsx'
-import WorkList from '../components/WorkList.jsx'
-import WatsonSuggestions from '../components/WatsonSuggestions.jsx'
+import PersonalTaskList from '../components/PersonalTaskList.jsx'
 import { moveBoardCard } from '../boardOrder.js'
-import { syncMonitor, useCacheRefresh, useSyncStatus } from '../useSyncRefresh.js'
+import { syncMonitor, useCacheRefresh } from '../useSyncRefresh.js'
 
 const EMPTY_WORK = { items: [] }
 
@@ -64,13 +61,6 @@ export default function MyWork() {
   const [meetings, setMeetings] = useState([])
   const [scheduleLoading, setScheduleLoading] = useState(true)
   const [scheduleError, setScheduleError] = useState('')
-  const { status, error: healthError } = useSyncStatus()
-  const health = status?.sources || []
-  const healthLoading = !status && !healthError
-  const [inbox, setInbox] = useState([])
-  const [inboxError, setInboxError] = useState('')
-  const [suggestions, setSuggestions] = useState([])
-  const [suggestionsError, setSuggestionsError] = useState('')
   const [newTitle, setNewTitle] = useState('')
   const [importUrl, setImportUrl] = useState('')
   const [addMode, setAddMode] = useState('local')
@@ -82,14 +72,6 @@ export default function MyWork() {
     if (signal.aborted) return
     setWork({ ...EMPTY_WORK, ...data }); setWorkError('')
   }).catch((err) => { if (err.name !== 'AbortError') setWorkError('Could not load work. Try refreshing.') }).finally(() => { if (!signal.aborted) setWorkLoading(false) }), [])
-  const loadInbox = useCallback((signal) => api.workInbox({ signal }).then((data) => {
-    if (signal.aborted) return
-    setInbox(data.inbox || []); setInboxError('')
-  }).catch((err) => { if (err.name !== 'AbortError') setInboxError('Inbox is temporarily unavailable.') }), [])
-  const loadSuggestions = useCallback((signal) => api.reviewSuggestions({ signal }).then((data) => {
-    if (signal.aborted) return
-    setSuggestions(data.suggestions || []); setSuggestionsError('')
-  }).catch((err) => { if (err.name !== 'AbortError') setSuggestionsError('Review suggestions are temporarily unavailable.') }), [])
   const loadCalendar = useCallback((signal) => api.today({ signal }).then((data) => {
     if (signal.aborted) return
     setMeetings(data.meetings || []); setScheduleError('')
@@ -97,8 +79,8 @@ export default function MyWork() {
     if (err.name !== 'AbortError') setScheduleError('Schedule is temporarily unavailable.')
   }).finally(() => { if (!signal.aborted) setScheduleLoading(false) }), [])
   const refresh = useCallback(signal => {
-    loadWork(signal); loadInbox(signal); loadCalendar(signal); loadSuggestions(signal)
-  }, [loadWork, loadInbox, loadCalendar, loadSuggestions])
+    loadWork(signal); loadCalendar(signal)
+  }, [loadWork, loadCalendar])
   useCacheRefresh(refresh)
 
   useEffect(() => {
@@ -143,23 +125,18 @@ export default function MyWork() {
       setMutationError(addMode === 'local' ? 'Could not add local work. Please try again.' : 'Could not import this link. Check the URL and integration in Settings, then try again.')
     } finally { setAddBusy(false); release() }
   }
-  const refreshInbox = (id) => setInbox((items) => items.filter((item) => item.id !== id))
   const refreshAfterCapture = () => {
     syncMonitor.refresh()
-  }
-  const refreshSuggestions = () => syncMonitor.refresh()
-  const retryHealth = async (source) => {
-    await api.retrySync(source)
-    syncMonitor.check(); syncMonitor.refresh()
   }
 
   return <div className="my-work-page">
     <header className="my-work-header">
-      <div><p className="eyebrow">My Work</p><h1>Make today count.</h1></div>
-      <IntegrationHealth sources={health} loading={healthLoading} error={healthError} onOpenSettings={() => navigate('/settings/integrations')} onRetry={retryHealth} />
+      <div><p className="eyebrow">My Work</p><h1>My day</h1><p className="my-day-date">{new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</p></div>
+      {!workLoading && !workError && <span className="my-day-count">{work.items.length} active {work.items.length === 1 ? 'task' : 'tasks'}</span>}
     </header>
-    <ScheduleStrip meetings={meetings} loading={scheduleLoading} error={scheduleError} />
-    <CompactCapture onCaptured={refreshAfterCapture} />
+    <ScheduleStrip personal meetings={meetings} loading={scheduleLoading} error={scheduleError} />
+    <section className="personal-tasks" aria-labelledby="my-tasks-title">
+    <div className="personal-tasks-heading"><h2 id="my-tasks-title">My tasks</h2><button type="button" onClick={() => { setAddMode('local'); setShowAdd(true) }}>+ Add work</button></div>
     {showAdd && <form className="add-work-form" onSubmit={addWork}>
       <div className="add-work-modes" role="group" aria-label="Add work mode"><button type="button" className={addMode === 'local' ? 'active' : ''} onClick={() => setAddMode('local')} aria-pressed={addMode === 'local'}>Local work</button><button type="button" className={addMode === 'import' ? 'active' : ''} onClick={() => setAddMode('import')} aria-pressed={addMode === 'import'}>Import link</button></div>
       {addMode === 'local' ? <><label htmlFor="new-work-title">New work</label><input id="new-work-title" autoFocus value={newTitle} onChange={(event) => setNewTitle(event.target.value)} placeholder="What needs your attention?" /></> : <><label htmlFor="import-work-url">GitLab MR or ClickUp task URL</label><input id="import-work-url" type="url" autoFocus value={importUrl} onChange={(event) => setImportUrl(event.target.value)} placeholder="https://gitlab…/merge_requests/42 or https://app.clickup.com/…" /><span className="add-work-import-note">Imports the linked work into Watson; it does not change ClickUp or GitLab.</span></>}
@@ -167,16 +144,8 @@ export default function MyWork() {
     </form>}
     {mutationError && <p className="work-inline-error" role="alert">{mutationError}</p>}
     {workError && <p className="work-inline-error" role="alert">{workError}</p>}
-    {workLoading ? <p className="work-loading">Loading your work…</p> : <div className="my-work-grid flat-board">
-      <div className="my-work-main-column">
-        <WorkList title="Priority" items={work.items} onMove={moveCard} onOpen={(item) => navigate(`/work/${item.id}`, { sourceBoard: 'my-work' })} />
-      </div>
-      <aside className="my-work-support-column">
-        {suggestionsError && <p className="work-inline-error" role="alert">{suggestionsError}</p>}
-        <WatsonSuggestions items={suggestions} onChanged={refreshSuggestions} />
-        {inboxError && <p className="work-inline-error" role="alert">{inboxError}</p>}
-        <WorkInbox items={inbox} work={work} onChanged={refreshInbox} />
-      </aside>
-    </div>}
+    {workLoading ? <p className="work-loading">Loading your work…</p> : <PersonalTaskList items={work.items} onMove={moveCard} onOpen={(item) => navigate(`/work/${item.id}`, { sourceBoard: 'my-work' })} />}
+    </section>
+    <CompactCapture onCaptured={refreshAfterCapture} />
   </div>
 }

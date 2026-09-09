@@ -29,7 +29,7 @@ export default function Team() {
   }
 
   return <div className="team-page">
-    <header className="team-header"><div><p className="eyebrow">Team</p><h1>A clear view of your team.</h1><p>See what everyone is working on. Drag cards to set your own priorities.</p></div><div className="team-header-actions"><button type="button" className={`team-me-mode${meMode ? ' active' : ''}`} role="switch" aria-checked={meMode} onClick={toggleMeMode}><span aria-hidden="true" />Me mode</button><button type="button" className="team-retry" onClick={() => syncMonitor.refresh()}>Refresh</button></div></header>
+    <header className="team-header"><div><p className="eyebrow">Team</p><h1>A clear view of your team.</h1><p>See what everyone is working on. Drag cards to set your own priorities.</p></div><div className="team-header-actions"><button type="button" className={`team-me-mode${meMode ? ' active' : ''}`} role="switch" aria-checked={meMode} onClick={toggleMeMode}><span aria-hidden="true" />Me mode</button></div></header>
     {error && <div className="team-error" role="alert"><p>{error}</p><button type="button" onClick={() => syncMonitor.refresh()}>Try again</button></div>}
     {loading ? <p className="work-loading">Loading the team board…</p> : <div className="team-lanes" aria-label="Team work lanes">
       {lanes.map((lane, index) => <PersonLane key={lane.person?.id || lane.name} lane={lane} onItemsChange={(items) => setLaneItems(index, items)} onOpen={(item) => navigate(`/work/${item.id}`, { sourceBoard: 'team' })} />)}

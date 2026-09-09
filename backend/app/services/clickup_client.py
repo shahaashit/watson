@@ -18,6 +18,7 @@ import requests
 from ..config import settings
 from ..models import now_iso
 from . import app_settings, external_errors, secret_store
+from .clickup_errors import workspace_denied
 
 log = logging.getLogger("watson.clickup")
 
@@ -150,7 +151,7 @@ _TASK_CIRCUIT_BREAKER = CircuitBreaker()
 def _request(method, *args, **kwargs):
     response = getattr(requests, method)(*args, **kwargs)
     authorization = kwargs.get('headers', {}).get('Authorization', '')
-    if authorization.startswith('Bearer ') and response.status_code == 401:
+    if authorization.startswith('Bearer ') and response.status_code == 401 and not workspace_denied(response):
         from . import clickup_oauth
         clickup_oauth.mark_unauthorized(authorization)
     return response
@@ -411,6 +412,8 @@ def refresh_exact_tasks(conn, task_ids, *, config=None) -> dict[str, int]:
             continue
         if isinstance(outcome, BaseException):
             result["failed"] += 1
+            if workspace_denied(getattr(outcome, 'response', None)):
+                result['restricted'] = result.get('restricted', 0) + 1
             external_errors.log_failure(log, "exact task refresh", "clickup", outcome)
             continue
         try:

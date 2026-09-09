@@ -6,7 +6,9 @@ live SQLite database on your Mac.
 
 The app has three primary views:
 
-- **My Work** — your work, linked tasks and merge requests, notes, and local priority.
+- **My Work** — your active tasks with direct ClickUp links, all of today's
+  meetings, and a compact capture/ask box. Priority ordering stays local.
+  Review-tracking tasks are excluded from this personal view, without deleting them.
 - **Team** — explicit tracked-person lanes plus permanent Others and
   Unassigned lanes. Each lane scrolls inside its card.
 - **Log** — searchable work activity, captures, decisions, and approvals.
@@ -41,7 +43,7 @@ one error. A running or skipped attempt leaves the previous completion visible
 until the active attempt finishes. These metrics contain no raw error details.
 
 While Watson is visible, one shared status poll checks for completed syncs every
-three seconds. My Work (including calendar, inbox and suggestions), Team, Log,
+three seconds. My Work (including its calendar), Team, Log,
 and open work details then reload their cached data in place. Returning to a
 hidden tab also refreshes these views. Drafts and filters stay intact; board
 refreshes wait until dragging and priority saves finish. Settings uses the same

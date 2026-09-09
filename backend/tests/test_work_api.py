@@ -13,6 +13,40 @@ def test_create_move_and_read_work_item(client):
     assert client.get("/api/work-items/my").json()["today"][0]["id"] == item["id"]
 
 
+def test_my_tasks_expose_clickup_links_without_live_provider_reads(client, conn):
+    item = client.post('/api/work-items', json={'title': 'My task'}).json()['work_item']
+    conn.execute("INSERT INTO work_links (work_item_id,source_type,external_id,created_at) VALUES (?,'clickup','abc123','now')", (item['id'],))
+    conn.commit()
+    task = client.get('/api/work-items/my').json()['items'][0]
+    assert task['clickup_url'] == 'https://app.clickup.com/t/abc123'
+    conn.execute("UPDATE work_links SET external_id='../../unsafe' WHERE work_item_id=?", (item['id'],))
+    conn.commit()
+    task = client.get('/api/work-items/my').json()['items'][0]
+    assert task['clickup_url'] == ''
+
+
+def test_my_task_link_prefers_own_managed_task_over_related_team_task(client, conn):
+    item = client.post('/api/work-items', json={'title': 'My task'}).json()['work_item']
+    for task_id in ('team123', 'mine456'):
+        conn.execute("INSERT INTO work_links (work_item_id,source_type,external_id,created_at) VALUES (?,'clickup',?,'now')", (item['id'], task_id))
+    conn.execute("INSERT INTO managed_tasks (clickup_task_id,related_clickup_task_id) VALUES ('mine456','team123')")
+    conn.commit()
+    assert client.get('/api/work-items/my').json()['items'][0]['clickup_url'] == 'https://app.clickup.com/t/mine456'
+
+
+def test_my_work_excludes_tracked_reviews_without_deleting_them(client, conn):
+    personal = client.post('/api/work-items', json={'title': 'Review my own project plan'}).json()['work_item']
+    review = client.post('/api/work-items', json={'title': 'Review - Team merge request'}).json()['work_item']
+    conn.execute("INSERT INTO work_links (work_item_id,source_type,external_id,created_at) VALUES (?,'clickup','review123','now')", (review['id'],))
+    conn.execute("INSERT INTO managed_tasks (clickup_task_id,category) VALUES ('review123','Review')")
+    conn.commit()
+    result = client.get('/api/work-items/my').json()
+    assert [item['id'] for item in result['items']] == [personal['id']]
+    assert [item['id'] for item in result['next']] == [personal['id']]
+    assert client.get(f"/api/work-items/{review['id']}").status_code == 200
+    assert conn.execute('SELECT count(*) FROM managed_tasks').fetchone()[0] == 1
+
+
 def test_board_routes_follow_profile_mode_and_hide_historical_done(client, conn):
     mine = client.post("/api/work-items", json={"title": "Active"}).json()["work_item"]
     historical = client.post(

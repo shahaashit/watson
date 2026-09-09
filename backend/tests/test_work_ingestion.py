@@ -406,6 +406,40 @@ def test_linked_clickup_ids_is_stable_and_deduplicated(conn):
     assert work_ingestion.linked_clickup_ids(conn) == ["a-task", "z-task"]
 
 
+def test_clickup_refresh_scope_skips_unrelated_and_historical_work_without_deleting(conn):
+    from app.models import now_iso
+    from app.services import work_ingestion
+    stamp = now_iso()
+    tracked = conn.execute("INSERT INTO people (display_name,is_tracked,created_at,updated_at) VALUES ('Teammate',1,?,?)", (stamp,stamp)).lastrowid
+    outsider = conn.execute("INSERT INTO people (display_name,is_tracked,created_at,updated_at) VALUES ('Outside',0,?,?)", (stamp,stamp)).lastrowid
+    cases = [
+        ('active-team', 'migration', tracked, 'next'),
+        ('old-outsider', 'discovery', outsider, 'next'),
+        ('closed-team', 'migration', tracked, 'done'),
+        ('ignored-team', 'ignored', tracked, 'next'),
+        ('explicit-import', 'manual', outsider, 'next'),
+    ]
+    for key, origin, owner, state in cases:
+        item = work_items.create_work_item(conn,title=key,origin=origin,owner_person_id=owner,state=state)
+        work_items.add_work_link(conn,item['id'],source_type='clickup',external_id=key)
+    before = conn.execute('SELECT count(*) FROM work_links').fetchone()[0]
+    assert work_ingestion.linked_clickup_ids(conn) == ['active-team', 'explicit-import']
+    assert conn.execute('SELECT count(*) FROM work_links').fetchone()[0] == before
+
+
+def test_clickup_refresh_scope_keeps_current_review_without_clickup_cache(conn):
+    from app.services import work_ingestion
+
+    item = work_items.create_work_item(conn, title="Current review", origin="discovery")
+    work_items.add_work_link(conn, item["id"], source_type="clickup", external_id="linked-task")
+    work_items.add_work_link(conn, item["id"], source_type="gitlab_mr", external_id="1!review")
+    _insert_mr(conn, "1!review", "Current review", author_username="outside", roles='["reviewer"]')
+
+    assert work_ingestion.linked_clickup_ids(conn) == ["linked-task"]
+    conn.execute("UPDATE gitlab_mrs_cache SET roles='[]' WHERE mr_id='1!review'")
+    assert work_ingestion.linked_clickup_ids(conn) == []
+
+
 def test_manual_clickup_url_imports_exact_task_to_next(client, monkeypatch):
     """Replacing exact import with arbitrary URL fetches would bypass the allowlist."""
     from app.services import clickup_client

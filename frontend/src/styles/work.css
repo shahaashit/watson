@@ -76,3 +76,48 @@
 @media (max-width: 520px) {
   .work-card-actions { flex-direction: column; gap: 0; }
 }
+
+/* Personal day view: intentionally separate from shared Team cards. */
+.my-work-page .my-day-date { margin: 5px 0 0; color: var(--text-dim); font-size: .87rem; }
+.my-work-page .my-day-count { color: var(--text-dim); font-size: .82rem; }
+.my-work-page .personal-tasks { min-width: 0; padding: 18px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-sm); }
+.my-work-page .personal-tasks-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.my-work-page .personal-tasks-heading h2 { margin: 0; font-size: 1rem; letter-spacing: -.02em; }
+.my-work-page .personal-tasks-heading > button { flex-shrink: 0; border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; color: var(--violet); background: var(--surface); font: inherit; font-size: .78rem; cursor: pointer; }
+.my-work-page .personal-tasks .add-work-form { margin-bottom: 14px; box-shadow: none; }
+.my-work-page .personal-task-list { display: grid; gap: 9px; }
+.my-work-page .personal-task-row { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 13px 12px 13px 15px; border: 1px solid #dbe1eb; border-radius: 10px; background: #fafbfe; }
+.my-work-page .personal-task-row:hover, .my-work-page .personal-task-row:focus-within { border-color: #ada9df; background: #f7f7ff; }
+.my-work-page .personal-task-content { min-width: 0; display: grid; justify-items: start; gap: 5px; }
+.my-work-page .personal-task-open { width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.my-work-page .personal-task-title { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; white-space: normal; font-size: .92rem; line-height: 1.5; font-weight: 600; }
+.my-work-page .personal-task-source { display: inline-flex; align-items: center; gap: 4px; color: var(--violet); font-size: .73rem; text-decoration: none; }
+.my-work-page .personal-task-source:hover { text-decoration: underline; }
+.my-work-page .personal-task-actions { display: flex; gap: 2px; }
+.my-work-page .personal-task-actions button { width: 30px; height: 32px; border: 0; border-radius: 6px; padding: 0; color: var(--text-dim); background: transparent; font: inherit; cursor: pointer; }
+.my-work-page .personal-task-actions button:hover:not(:disabled) { background: #e8e7fa; color: var(--violet); }
+.my-work-page .personal-task-actions button:disabled { opacity: .3; cursor: not-allowed; }
+.my-work-page .personal-task-actions .personal-task-drag { cursor: grab; touch-action: none; letter-spacing: -3px; padding-right: 3px; }
+.my-work-page .personal-task-actions .personal-task-drag:active { cursor: grabbing; }
+.my-work-page :is(.personal-task-open, .personal-task-source, .personal-task-actions button, .personal-tasks-heading > button):focus-visible { outline: 2px solid var(--violet); outline-offset: 3px; border-radius: 5px; }
+.my-work-page .personal-task-drop-end { min-height: 9px; border-radius: 5px; }
+.my-work-page .personal-task-drop-end.is-drop-target-end { background: #ada9df; }
+.my-work-page .personal-tasks-empty { margin: 4px 0; color: var(--text-dim); font-size: .86rem; }
+.my-work-page .personal-schedule { padding: 13px 16px; grid-template-columns: 100px minmax(0, 1fr); }
+.my-work-page .personal-schedule .schedule-event-trigger { padding: 8px 10px; border-left: 0; border-radius: 8px; }
+.my-work-page .personal-schedule .schedule-event-trigger.is-next { background: #eeedff; color: var(--text); }
+.my-work-page .personal-schedule .schedule-next-label { color: var(--violet); font-size: .66rem; font-weight: 700; }
+.my-work-page .personal-schedule .schedule-event-trigger time { color: var(--text-dim); font-size: .76rem; }
+@media (max-width: 760px) {
+  .my-work-page .my-work-header { gap: 8px; }
+  .my-work-page .personal-schedule { grid-template-columns: 1fr; }
+  .my-work-page .personal-tasks { padding: 13px; }
+}
+@media (max-width: 520px) {
+  .my-work-page .personal-task-actions { flex-direction: column; gap: 0; }
+  .my-work-page .personal-task-row { gap: 8px; padding: 11px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .my-work-page .personal-schedule .schedule-event-trigger { transition: none; }
+  .my-work-page .personal-schedule .schedule-event-popover { animation: none; }
+}

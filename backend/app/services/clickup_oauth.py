@@ -96,9 +96,10 @@ def mark_unauthorized(authorization):
 
 
 def _read(path, authorization):
+    from .clickup_errors import workspace_denied
     response = requests.get(API + path, headers={'Authorization': authorization},
                             timeout=20, allow_redirects=False)
-    if response.status_code == 401:
+    if response.status_code == 401 and not workspace_denied(response):
         mark_unauthorized(authorization)
     if response.status_code != 200:
         raise ValueError('ClickUp request failed. Check account permissions and retry.')

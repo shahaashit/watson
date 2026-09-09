@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import useDismissibleLayer from '../useDismissibleLayer.js'
+import { personalSchedule } from '../personalSchedule.js'
 import {
   cleanMeetingDescription,
   formatMeetingTimeRange,
@@ -34,7 +35,16 @@ function MeetingDetails({ meeting, position, onMouseEnter, onMouseLeave }) {
   )
 }
 
-export default function ScheduleStrip({ meetings = [], loading, error }) {
+export default function ScheduleStrip({ meetings = [], loading, error, personal = false, now }) {
+  const [clock, setClock] = useState(() => new Date())
+  useEffect(() => {
+    if (!personal || now) return undefined
+    const timer = setInterval(() => setClock(new Date()), 60000)
+    return () => clearInterval(timer)
+  }, [personal, now])
+  const currentTime = now || clock
+  const selection = personal ? personalSchedule(meetings, currentTime) : { meetings }
+  const visibleMeetings = selection.meetings
   const [activeMeeting, setActiveMeeting] = useState(null)
   const [popoverPosition, setPopoverPosition] = useState({ left: 12 })
   const showTimer = useRef(null)
@@ -79,20 +89,20 @@ export default function ScheduleStrip({ meetings = [], loading, error }) {
   return (
     <section
       ref={rootRef}
-      className={`schedule-strip${activeMeeting ? ' has-open-event' : ''}`}
+      className={`schedule-strip${personal ? ' personal-schedule' : ''}${activeMeeting ? ' has-open-event' : ''}`}
       aria-label="Today’s schedule"
       onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) { focusOpenedId.current = null; setActiveMeeting(null) } }}
       onPointerDown={(event) => { if (!event.target.closest?.('.schedule-event-trigger, .schedule-event-popover')) { focusOpenedId.current = null; setActiveMeeting(null) } }}
     >
-      <div className="schedule-heading"><h2>Schedule</h2><span>Today</span></div>
+      <div className="schedule-heading"><h2>{personal ? 'My calendar' : 'Schedule'}</h2>{!personal && <span>Today</span>}</div>
       {loading && <p className="schedule-status">Loading schedule…</p>}
       {error && <p className="schedule-status">Schedule is unavailable; your work lists are still up to date.</p>}
-      {!loading && !error && (!meetings.length ? <p className="schedule-status">No meetings on the calendar.</p> : (
+      {!loading && !error && (!visibleMeetings.length ? <p className="schedule-status">{personal ? 'No meetings today.' : 'No meetings on the calendar.'}</p> : (
         <div className="schedule-events">
-          {meetings.slice(0, 4).map((meeting) => <button
+          {(personal ? visibleMeetings : visibleMeetings.slice(0, 4)).map((meeting) => <button
             type="button"
             key={meeting.event_id}
-            className="schedule-event-trigger"
+            className={`schedule-event-trigger${personal && meeting.event_id === selection.nextId ? ' is-next' : ''}`}
             aria-haspopup="dialog"
             aria-expanded={activeMeeting?.event_id === meeting.event_id}
             aria-controls={activeMeeting?.event_id === meeting.event_id ? 'schedule-meeting-details' : undefined}
@@ -106,9 +116,10 @@ export default function ScheduleStrip({ meetings = [], loading, error }) {
             }}
             onClick={(event) => toggleMeeting(meeting, event.currentTarget)}
           >
+            {personal && meeting.event_id === selection.nextId && <strong className="schedule-next-label">{new Date(meeting.start_at) <= currentTime ? 'Now' : 'Next up'}</strong>}
             <time>{meeting.all_day ? 'All day' : timeLabel(meeting.start_at)}</time><span>{meeting.title || 'Untitled meeting'}</span>
           </button>)}
-          {meetings.length > 4 && <span className="schedule-more">+{meetings.length - 4} more</span>}
+          {!personal && visibleMeetings.length > 4 && <span className="schedule-more">+{visibleMeetings.length - 4} more</span>}
         </div>
       ))}
       {activeMeeting && <MeetingDetails meeting={activeMeeting} position={popoverPosition} onMouseEnter={cancelTimers} onMouseLeave={hideSoon} />}

@@ -69,6 +69,26 @@ def test_stale_unauthorized_response_does_not_revoke_new_token(conn, cfg):
     assert oauth.view(conn)['reauth_required']
 
 
+@pytest.mark.parametrize('reader', ['task', 'workspace'])
+@pytest.mark.parametrize('code,revoked', [('OAUTH_027', False), ('OAUTH_026', False), ('OAUTH_025', True)])
+def test_workspace_denial_does_not_revoke_valid_login(conn, cfg, monkeypatch, reader, code, revoked):
+    import requests
+    from app.services import clickup_oauth as oauth
+    secret_store.set_secret(oauth.APP_SECRET, json.dumps(cfg))
+    secret_store.set_secret(oauth.GRANT_SECRET, json.dumps({'client_id': cfg['client_id'], 'access_token': 'current'}))
+    response = requests.Response()
+    response.status_code = 401
+    response._content = json.dumps({'ECODE': code, 'err': 'private provider text'}).encode()
+    monkeypatch.setattr(oauth.requests, 'get', lambda *args, **kwargs: response)
+    if reader == 'task':
+        with pytest.raises(requests.HTTPError):
+            clickup_client.get_task('restricted')
+    else:
+        with pytest.raises(ValueError):
+            oauth._read('/team/1/space', 'Bearer current')
+    assert oauth.view(conn)['reauth_required'] is revoked
+
+
 def test_destination_must_belong_to_authorized_workspace_and_space(conn, cfg, monkeypatch):
     from app.services import clickup_oauth as oauth
     secret_store.set_secret('clickup.token', 'pat')

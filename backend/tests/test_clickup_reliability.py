@@ -360,6 +360,23 @@ def test_failed_refresh_keeps_cached_row(conn, monkeypatch):
     ).fetchone()["name"] == "Cached"
 
 
+def test_restricted_task_is_reported_separately_from_connection_failure(conn, monkeypatch):
+    from app.services import clickup_client, sync_pipeline, user_meta
+    _configured(monkeypatch, clickup_client)
+    def response(url, **kwargs):
+        if url.endswith('/restricted'):
+            return FakeResponse(401, json_body={'ECODE': 'OAUTH_027'})
+        return FakeResponse(200, json_body={'id': 'good', 'name': 'Accessible', 'status': {}})
+    monkeypatch.setattr(clickup_client.requests, 'get', response)
+    result = clickup_client.refresh_exact_tasks(conn, ['restricted', 'good'])
+    assert result == {'updated': 1, 'failed': 1, 'skipped': 0, 'restricted': 1}
+    sync_pipeline._mark_source_result(conn, 'clickup', 'clickup_exact', result)
+    health = next(s for s in user_meta.integration_health(conn) if s['source'] == 'clickup')
+    assert '1 task refreshed' in health['message']
+    assert '1 linked task requires workspace access' in health['message']
+    assert health['last_success_at']
+
+
 def test_exact_refresh_deduplicates_and_upserts_each_success(conn, monkeypatch):
     from app.services import clickup_client
 

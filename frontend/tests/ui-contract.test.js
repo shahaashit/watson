@@ -7,20 +7,9 @@ test('work surfaces keep local state out of the interface', () => {
   const myWork = fs.readFileSync(new URL('../src/views/MyWork.jsx', import.meta.url), 'utf8')
   const detail = fs.readFileSync(new URL('../src/views/WorkDetail.jsx', import.meta.url), 'utf8')
   const profile = fs.readFileSync(new URL('../src/components/ProfileSettings.jsx', import.meta.url), 'utf8')
-  assert.match(myWork, /title="Priority"/)
-  assert.match(myWork, /WorkInbox/)
   assert.doesNotMatch(myWork, /title="Today"|title="Next"|title="Waiting"|title="Done today"/)
   assert.doesNotMatch(detail, /Local state|Local priority|detail-state/)
   assert.doesNotMatch(profile, /Separate by status|Today, Next, Waiting, and Done Today/)
-})
-
-test('review automation suggestions live in My Work above Inbox without a new route', () => {
-  const myWork = fs.readFileSync(new URL('../src/views/MyWork.jsx', import.meta.url), 'utf8')
-  const app = fs.readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8')
-  assert.match(myWork, /WatsonSuggestions/)
-  assert.match(myWork, /api\.reviewSuggestions/)
-  assert.ok(myWork.indexOf('<WatsonSuggestions') < myWork.indexOf('<WorkInbox'))
-  assert.doesNotMatch(app, /review-automation/)
 })
 
 test('work capture and read-only external import are reachable', () => {
@@ -43,11 +32,11 @@ test('work lists keep native drag ordering affordances', () => {
   for (const token of ['api.moveWork', 'moveBoardCard']) assert.match(board, new RegExp(token.replace('.', '\\.')))
 })
 
-test('My Work isolates cached health from calendar loading', () => {
+test('My Work reloads its calendar through the shared cache refresh', () => {
   const source = fs.readFileSync(new URL('../src/views/MyWork.jsx', import.meta.url), 'utf8')
   assert.match(source, /api\.today/)
   assert.match(source, /loadCalendar/)
-  assert.match(source, /useSyncStatus/)
+  assert.match(source, /useCacheRefresh/)
 })
 
 test('integration health displays safe cached state metadata', () => {

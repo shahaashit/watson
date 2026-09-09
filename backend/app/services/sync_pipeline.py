@@ -169,9 +169,21 @@ def _mark_source_result(conn, source: str, operation: str, result) -> None:
     if source == "clickup" and isinstance(result, dict):
         unavailable = int(result.get("failed", 0) or 0) + int(result.get("skipped", 0) or 0)
         if unavailable:
+            updated = int(result.get('updated', 0) or 0)
+            restricted = int(result.get('restricted', 0) or 0)
+            message = "Some linked ClickUp tasks could not be refreshed. Cached data remains available."
+            if restricted:
+                message = (
+                    f"{updated} task{'s' if updated != 1 else ''} refreshed. "
+                    f"{restricted} linked task{'s require' if restricted != 1 else ' requires'} workspace access. "
+                    "Check access to those tasks in ClickUp; retrying alone will not grant access."
+                )
+                if unavailable > restricted:
+                    message += f" {unavailable - restricted} other refreshes failed."
             user_meta.set_integration_health(conn, source, {
                 "status": "degraded",
-                "message": "Some linked ClickUp tasks could not be refreshed. Cached data remains available.",
+                "message": message,
+                **({"last_success_at": now_iso()} if updated else {}),
                 "technical": user_meta.technical_metadata(operation=operation),
             })
             return

@@ -33,7 +33,6 @@ export default function TodayPanel({ onChanged }) {
   }
 
   const meetings = data.meetings || []
-  const flock = data.flock || []
   const reminders = data.reminders_due || []
   const stale = data.stale_mrs || []
   const pending = data.pending_count || 0
@@ -65,16 +64,6 @@ export default function TodayPanel({ onChanged }) {
         )}
       </section>
 
-      <section className="today-panel-section">
-        <div className="today-panel-label">
-          Flock <span className="count">{flock.length}</span>
-        </div>
-        {flock.length > 0 ? (
-          flock.map((f) => <FlockRow key={f.jid} chat={f} />)
-        ) : (
-          <p className="today-panel-empty">Flock is quiet.</p>
-        )}
-      </section>
 
       <section className="today-panel-section">
         <div className="today-panel-label">

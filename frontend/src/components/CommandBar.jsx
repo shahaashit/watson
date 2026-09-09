@@ -23,7 +23,7 @@ function buildActions(setView, syncAll, addWork, navigateTo) {
       subtitle: 'Question your log', keywords: 'ask query search question',
       run: () => { setView('my-work'); window.setTimeout(() => window.dispatchEvent(new Event('watson:focus-ask')), 0) } },
     { id: 'a-sync', icon: '⏱', title: 'Sync now',
-      subtitle: 'Refresh ClickUp + GitLab + Calendar + Flock', keywords: 'sync refresh',
+      subtitle: 'Refresh ClickUp + GitLab + Calendar', keywords: 'sync refresh',
       run: () => { syncAll() } },
     { id: 'a-settings', icon: '⚙', title: 'Settings',
       subtitle: 'Connections, people, sync, and backup', keywords: 'settings integration people backup',

@@ -22,7 +22,8 @@ test('profile settings expose the configurable identity email domain', async () 
   })
   assert.match(markup, /Email domain/)
   assert.match(markup, /value="engineering\.example"/)
-  assert.match(markup, /ClickUp, Calendar, and Flock identities/)
+  assert.match(markup, /ClickUp and Calendar identities/)
+  assert.doesNotMatch(markup, /Flock/)
 })
 
 test('ambiguous review grouping offers Merge and Keep separate', async () => {

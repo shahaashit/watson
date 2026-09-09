@@ -83,38 +83,6 @@ def build_digest_text(conn) -> str:
         lines.append("- no meetings today")
     lines.append("")
 
-    chats = flock_client.todays_mentions(conn)
-    lines.append(f"**Flock — waiting on you ({len(chats)})**")
-    if chats:
-        for c in chats:
-            prefix = "#" if c["is_group"] else "@"
-            # Prefer the deep-read mention count (surfaces read+recent) over
-            # the sidebar unread count, since the interesting news is who
-            # tagged you today regardless of read status.
-            deep = _flock_deep_mentions(c)
-            if deep:
-                lines.append(
-                    f"- {prefix}{c['name'] or '(no name)'} — {len(deep)} @-mention"
-                    f"{'s' if len(deep) != 1 else ''} today"
-                )
-                # Include up to 2 message snippets under the chat line so the
-                # digest tells the user *what* they were tagged about, not
-                # just "you got tagged in X".
-                for m in deep[:2]:
-                    sender = m.get("sender_name") or m.get("sender") or "someone"
-                    text = (m.get("text") or "").replace("\n", " ").strip()
-                    if len(text) > 140:
-                        text = text[:140] + "…"
-                    lines.append(f"    · {sender}: {text}")
-            else:
-                marker = " (mention)" if c["has_mention"] else ""
-                lines.append(
-                    f"- {prefix}{c['name'] or '(no name)'} — {c['unread_count']} unread{marker}"
-                )
-    else:
-        lines.append("- nothing pending in Flock")
-    lines.append("")
-
     reminders = due_reminders(conn)
     lines.append(f"**Reminders due ({len(reminders)})**")
     if reminders:

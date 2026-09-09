@@ -10,6 +10,21 @@ import pytest
 from app.services import exporter, sync_pipeline, user_meta
 
 
+@pytest.fixture(autouse=True)
+def exercise_retained_connector_concurrency(monkeypatch):
+    # Keep coverage of the withheld connector's locks for eventual release.
+    monkeypatch.setattr(sync_pipeline, "FLOCK_RELEASED", True)
+
+
+def test_withheld_connector_never_runs_in_normal_sync(conn, monkeypatch):
+    monkeypatch.setattr(sync_pipeline, "FLOCK_RELEASED", False)
+    monkeypatch.setattr(sync_pipeline.flock_client, "configured", lambda: True)
+    monkeypatch.setattr(sync_pipeline.flock_client, "sync",
+                        lambda _conn: pytest.fail("unreleased connector ran"))
+    _quiet_downstream(monkeypatch)
+    assert "flock_sync" not in sync_pipeline.run_sync_pipeline(conn)
+
+
 def _quiet_downstream(monkeypatch):
     monkeypatch.setattr(
         sync_pipeline.settings_service,

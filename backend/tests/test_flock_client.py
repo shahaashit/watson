@@ -337,7 +337,7 @@ def test_today_endpoint_returns_flock(client, conn):
 
 # ─── digest inclusion ───────────────────────────────────────────────────
 
-def test_digest_text_includes_flock_section(conn):
+def test_digest_hides_flock_even_with_cached_messages(conn):
     from app.services import digest
     conn.execute(
         "INSERT INTO flock_mentions_cache (jid, name, is_group, has_mention,"
@@ -347,13 +347,12 @@ def test_digest_text_includes_flock_section(conn):
     )
     conn.commit()
     text = digest.build_digest_text(conn)
-    assert "Flock — waiting on you" in text
-    assert "Nikhil" in text
-    assert "2 unread" in text
+    assert "Flock" not in text
+    assert "Nikhil" not in text
+    assert "2 unread" not in text
 
 
 def test_digest_shows_empty_state_when_no_flock(conn):
     from app.services import digest
     text = digest.build_digest_text(conn)
-    assert "Flock — waiting on you (0)" in text
-    assert "nothing pending in Flock" in text
+    assert "Flock" not in text

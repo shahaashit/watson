@@ -113,7 +113,7 @@ test('Settings keeps secrets write-only and exposes the real source controls', (
   const integrations = fs.readFileSync(new URL('../src/components/IntegrationSettings.jsx', import.meta.url), 'utf8')
   const people = fs.readFileSync(new URL('../src/components/PeopleSettings.jsx', import.meta.url), 'utf8')
   const syncData = fs.readFileSync(new URL('../src/components/SyncDataSettings.jsx', import.meta.url), 'utf8')
-  for (const token of ['anthropic', 'gitlab', 'clickup', 'google-calendar', 'flock', 'credential_present', 'macOS Keychain', 'Disconnect']) {
+  for (const token of ['anthropic', 'gitlab', 'clickup', 'google-calendar', 'credential_present', 'macOS Keychain', 'Disconnect']) {
     assert.match(integrations, new RegExp(token.replace('.', '\\.')))
   }
   assert.doesNotMatch(integrations, /localStorage|sessionStorage/)

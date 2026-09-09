@@ -274,7 +274,6 @@ def build_prompt(conn, question: str, today: datetime = None) -> str:
         .replace("{gitlab_mrs}", _render_gitlab_mrs(conn))
         .replace("{clickup_tasks}", _render_clickup_tasks(conn))
         .replace("{recent_activity}", _render_recent_activity(conn))
-        .replace("{flock_messages}", _render_flock_messages(conn))
         .replace("{calendar}", _render_calendar(conn))
         .replace("{question}", question)
     )

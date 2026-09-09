@@ -51,7 +51,7 @@ export default function ProfileSettings({ profile, onSaved, compact = false }) {
     <form className="settings-form" onSubmit={save}>
       <label>Display name<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} autoComplete="name" disabled={busy} required /></label>
       <label>Timezone<input value={timezone} onChange={(event) => setTimezone(event.target.value)} placeholder="UTC" disabled={busy} required /></label>
-      <label>Email domain<input value={emailDomain} onChange={(event) => setEmailDomain(event.target.value)} placeholder="example.com" disabled={busy} required /><span className="settings-muted">Used for ClickUp, Calendar, and Flock identities.</span></label>
+      <label>Email domain<input value={emailDomain} onChange={(event) => setEmailDomain(event.target.value)} placeholder="example.com" disabled={busy} required /><span className="settings-muted">Used for ClickUp and Calendar identities.</span></label>
       <ReviewAutomationSettings values={reviewAutomation} onChange={setReviewAutomation} disabled={busy} />
       <div className="settings-form-actions"><button className="settings-primary" type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save profile'}</button>{message && <p className={message.includes('Could not') ? 'settings-error' : 'settings-success'} role="status">{message}</p>}</div>
     </form>

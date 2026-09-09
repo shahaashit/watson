@@ -7,7 +7,6 @@ const INTEGRATIONS = [
   { source: 'gitlab', title: 'GitLab', hint: 'Watson collects merge-request context into its local cache.', secret: 'token', secretLabel: 'Access token', fields: [['base_url', 'Base URL'], ['username', 'Username (optional)']] },
   { source: 'clickup', title: 'ClickUp', hint: 'Exact branch task IDs enrich local work without broad task scans.', secret: 'token', secretLabel: 'API token', fields: [['create_list_id', 'Create-list ID']] },
   { source: 'google-calendar', title: 'Google Calendar', hint: 'Calendar stays optional; local work is still available without it.', secret: 'client_config_json', secretLabel: 'OAuth client configuration JSON', fields: [] },
-  { source: 'flock', title: 'Flock', hint: 'Use Watson’s local browser profile to collect approved Flock context.', fields: [['profile_dir', 'Browser profile directory'], ['user_handle', 'Your Flock handle']] },
 ]
 
 const SOURCE_LABEL = Object.fromEntries(INTEGRATIONS.map(({ source, title }) => [source, title]))

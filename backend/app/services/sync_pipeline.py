@@ -27,6 +27,9 @@ from . import external_errors, user_meta
 
 log = logging.getLogger("watson.sync")
 
+# Withheld from the product until the integration is ready; not a user setting.
+FLOCK_RELEASED = False
+
 # Serialise concurrent pipeline runs — the boot-sync thread and a user's Sync
 # Now click (or two overlapping scheduler ticks) would otherwise thrash on
 # ClickUp/GitLab API rate limits and, worse, contend for Chrome CPU during
@@ -228,8 +231,9 @@ def _run_sync_pipeline_locked(conn) -> dict:
         ("clickup", "clickup_exact", clickup_client.configured, None),
         ("gitlab", "gitlab_sync", gitlab_client.configured, gitlab_client.sync),
         ("google-calendar", "gcal_sync", gcal_client.configured, gcal_client.sync),
-        ("flock", "flock_sync", flock_client.configured, flock_client.sync),
     )
+    if FLOCK_RELEASED:
+        specs += (("flock", "flock_sync", flock_client.configured, flock_client.sync),)
     gates = {
         source: _connector_gate(summary, source, operation, configured)
         for source, operation, configured, _fn in specs
@@ -252,7 +256,7 @@ def _run_sync_pipeline_locked(conn) -> dict:
         if fn is not None and gates[source]
     ]
     operations = {source: operation for source, operation, _configured, _fn in specs}
-    for source in user_meta.INTEGRATION_SOURCES:
+    for source in gates:
         if not gates[source]:
             operation = operations[source]
             if operation in summary:

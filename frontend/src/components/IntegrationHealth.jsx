@@ -4,7 +4,7 @@ import useDismissibleLayer from '../useDismissibleLayer.js'
 const HEALTH_LABELS = { healthy: 'Connected', degraded: 'Needs attention', disabled: 'Disabled', unconfigured: 'Not configured' }
 
 function sourceLabel(source) {
-  return { clickup: 'ClickUp', gitlab: 'GitLab', 'google-calendar': 'Google Calendar', flock: 'Flock', 'review-automation': 'Review automation' }[source] || source
+  return { clickup: 'ClickUp', gitlab: 'GitLab', 'google-calendar': 'Google Calendar', 'review-automation': 'Review automation' }[source] || source
 }
 
 function reviewNeedsAttention(source) {
@@ -38,7 +38,7 @@ export default function IntegrationHealth({ sources = [], loading, error, onOpen
   const [retrying, setRetrying] = useState('')
   const [retryError, setRetryError] = useState('')
   const rootRef = useDismissibleLayer({ open: expanded, onDismiss: () => setExpanded(false) })
-  const visibleSources = sources.filter(reviewNeedsAttention)
+  const visibleSources = sources.filter(source => source.source !== 'flock').filter(reviewNeedsAttention)
   const degraded = visibleSources.filter((source) => !['healthy', 'disabled'].includes(source.status)).length
   const label = loading ? 'Checking integrations' : degraded ? `${degraded} integration${degraded === 1 ? '' : 's'} need attention` : 'Integrations cached'
   const retry = async (source) => {

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api } from '../api.js'
 
 function sourceName(source) {
-  return { anthropic: 'AI provider', gitlab: 'GitLab', clickup: 'ClickUp', 'google-calendar': 'Google Calendar', flock: 'Flock' }[source] || source
+  return { anthropic: 'AI provider', gitlab: 'GitLab', clickup: 'ClickUp', 'google-calendar': 'Google Calendar' }[source] || source
 }
 
 function sourceState(source) {
@@ -29,7 +29,7 @@ export default function SyncDataSettings({ data, compact = false, mode = 'both' 
     try {
       const response = await api.syncStatus()
       if (!mountedRef.current || generation !== pollGenerationRef.current) return null
-      setSources(response.sources || [])
+      setSources((response.sources || []).filter(source => source.source !== 'flock'))
       return response
     }
     catch {
@@ -72,7 +72,7 @@ export default function SyncDataSettings({ data, compact = false, mode = 'both' 
       try {
         const status = await api.syncStatus()
         if (!mountedRef.current || generation !== pollGenerationRef.current) return null
-        setSources(status.sources || [])
+        setSources((status.sources || []).filter(source => source.source !== 'flock'))
         if (!status.running) return status
       } catch {
         return null

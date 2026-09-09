@@ -339,7 +339,7 @@ export default function Today({ onChanged }) {
   if (error) return <div className="today-page"><p className="error-text">Could not load today: {error}</p></div>
 
   const meetings = data.meetings || []
-  const flock = data.flock || []
+  const flock = [] // Integration withheld until ready for release.
   const pending = data.pending_actions || []
   // Feed the whole review queue into the MR table — it scrolls internally
   // when the list exceeds the card height, so there's no reason to pre-cap.
@@ -360,7 +360,6 @@ export default function Today({ onChanged }) {
         <div className="today-stats">
           <div className="today-stat"><span className="today-stat-num attn">{pullingCount}</span><span className="today-stat-lbl">Pull on you</span></div>
           <div className="today-stat"><span className="today-stat-num">{meetings.length}</span><span className="today-stat-lbl">Meetings</span></div>
-          <div className="today-stat"><span className="today-stat-num">{flock.length}</span><span className="today-stat-lbl">Flock</span></div>
           <div className="today-stat"><span className="today-stat-num">{(data.mrs || []).length}</span><span className="today-stat-lbl">MRs waiting</span></div>
           <div className="today-stat"><span className="today-stat-num">{pending.length}</span><span className="today-stat-lbl">Pending</span></div>
           <SyncControl

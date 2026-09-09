@@ -2,7 +2,7 @@
 
 Watson is a localhost, single-user work assistant built with FastAPI, SQLite,
 React, and Vite. It combines locally captured notes with cached ClickUp,
-GitLab, Google Calendar, and optional Flock context.
+GitLab and Google Calendar context.
 
 ## Safety invariants
 

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <defs>
+    <linearGradient id="w-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#9d8cff"/>
+      <stop offset="55%" stop-color="#ff5fd2"/>
+      <stop offset="100%" stop-color="#53d4ff"/>
+    </linearGradient>
+    <radialGradient id="w-glow" cx="50%" cy="50%" r="55%">
+      <stop offset="0%" stop-color="#9d8cff" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#9d8cff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <!-- dark rounded backing so the mark works on light + dark browser tabs -->
+  <rect width="32" height="32" rx="7.5" fill="#0a0712"/>
+  <!-- subtle inner glow -->
+  <rect width="32" height="32" rx="7.5" fill="url(#w-glow)"/>
+  <!-- subtle gradient border -->
+  <rect x="0.6" y="0.6" width="30.8" height="30.8" rx="6.9"
+        fill="none" stroke="url(#w-grad)" stroke-width="0.8" opacity="0.45"/>
+  <!-- W monogram, gradient stroke -->
+  <path d="M 7 9.2 L 11.5 23 L 16 15.5 L 20.5 23 L 25 9.2"
+        fill="none"
+        stroke="url(#w-grad)"
+        stroke-width="2.6"
+        stroke-linecap="round"
+        stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,16 @@
+.env
+.npmrc
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+node_modules/
+dist/
+.worktrees/
+.superpowers/
+docs/superpowers/
+*.db
+.DS_Store
+# IDE + local Claude settings
+.idea/
+.claude/settings.local.json

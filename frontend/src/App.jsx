@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import ConnectionNotice from './components/ConnectionNotice.jsx'
 import { api } from './api.js'
 import { navigate, parseRoute, subscribeRoute } from './routing.js'
 import MyWork from './views/MyWork.jsx'
@@ -69,6 +70,7 @@ export default function App() {
   }
 
   return <div className="app">
+    <ConnectionNotice />
     <div className="cursor-glow" aria-hidden="true" />
     <nav className="nav" aria-label="Primary navigation">
       <button className="brand" onClick={() => setView('my-work')} aria-label="Watson home">

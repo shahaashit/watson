@@ -36,6 +36,71 @@ frontend dependencies, builds the frontend, installs the local LaunchAgent,
 waits for a localhost health check, and opens onboarding. It does not require
 an `.env` file or API tokens.
 
+### Colleague setup: one shared file
+
+Your team can supply a private **`.watson-setup.json`** containing its GitLab
+application settings and Google **Desktop** OAuth client configuration. Place
+it in the repository root before installing (it is gitignored), or pass its path:
+
+```bash
+./scripts/install.sh --setup "$HOME/Downloads/.watson-setup.json"
+```
+
+The installer also accepts `WATSON_SETUP_FILE=/absolute/path/to/file.json`.
+It parses JSON as data, never executes it as shell code, and never prints its
+contents. The importer stores Google client credentials in macOS Keychain and
+GitLab's non-secret application ID/server in the local database. It does not
+sign anyone in automatically. Each colleague clicks **Connect GitLab** and
+**Connect Google**, authorizes their own account in the provider's browser
+window, and selects their GitLab repositories in Watson.
+
+For an existing installation, import the file and restart:
+
+```bash
+(cd backend && .venv/bin/python -m app.auth.setup_bundle import /absolute/path/to/.watson-setup.json)
+./scripts/restart.sh
+```
+
+Use [`watson-setup.example.json`](watson-setup.example.json) for the schema.
+Either integration can be omitted. The shared file must contain only
+application configuration: **never add personal GitLab tokens, Google access
+or refresh tokens, AI keys, ClickUp tokens, or a GitLab client secret.**
+Keep the real file private and out of source control, including renamed copies.
+Google Desktop client configuration is distributed to installed clients; it
+must not be replaced with a confidential Web/server OAuth client.
+
+Register a GitLab application as a **public client** (Confidential unchecked),
+with scope `read_api` and this exact redirect URI:
+
+```text
+http://127.0.0.1:18765/callback
+```
+
+Use that application's ID in the shared file. Each GitLab instance needs its
+own registration. Set `allow_http: true` only for an intentionally HTTP-only
+instance: PKCE does not encrypt HTTP traffic. The read-only OAuth scope does
+not permit GitLab mutations such as removing yourself as reviewer. A manually
+configured token with appropriate permissions remains available under
+**Manual connection settings** if those operations are needed.
+
+Google's app owner must enable Calendar API and configure its OAuth audience,
+test-user access, and any required verification. Sharing the client JSON does
+not bypass Google's account or organization restrictions. Reimporting identical
+configuration preserves existing user authorization; changing the Google client
+requires a new sign-in. GitLab tokens refresh automatically; rejected grants
+show **Reconnect GitLab** on the main interface while keeping cached work.
+
+The app owner can export the configured application details into a new private
+file (the command refuses to overwrite an existing file):
+
+```bash
+(cd backend && .venv/bin/python -m app.auth.setup_bundle export ../.watson-setup.json)
+```
+
+This file can also be supplied through deployment configuration in the future,
+but this release still runs locally on macOS. Hosting a multi-user application
+would require different redirect URIs, authentication, and credential storage.
+
 If a network uses private package mirrors, create a local, uncommitted
 `.watson-install.env` with only `PIP_INDEX_URL`, `PIP_TRUSTED_HOST`, and/or
 `NPM_CONFIG_REGISTRY`. You can use [`.env.example`](.env.example) as a blank,
@@ -64,9 +129,9 @@ require one. No coding-agent application is required to run Watson.
 | Integration | What you supply | Steps outside Watson |
 |---|---|---|
 | AI provider | Anthropic-compatible API key, available model, and optional gateway base URL | Obtain your own API credentials from your provider or administrator. |
-| GitLab | Instance base URL, personal access token, optional username; select repositories after saving | Create a personal token with `read_api` for collection. GitLab write actions, such as removing yourself as reviewer, need `api`. Your account must have access to the selected projects. |
+| GitLab | Click Connect GitLab when a shared setup file is imported, then select repositories. Manual token setup remains available. | Sign in and approve read access on your GitLab instance. Your account must have access to the selected projects. |
 | ClickUp | Personal API token and destination **Create-list ID** | Generate your own token and choose a list where you can create tasks. A successful connection check does not prove permission to create in that list. |
-| Google Calendar (optional) | OAuth Desktop client configuration JSON, pasted into the field | Prepare the client in Google Cloud, then authorize your Google account in the browser opened by **Connect Google**. |
+| Google Calendar (optional) | Click Connect Google when the shared file supplies its Desktop client; otherwise supply client JSON manually. | Authorize your own Google account in the browser opened by Connect Google. |
 
 For token creation, see [GitLab personal tokens](https://docs.gitlab.com/user/profile/personal_access_tokens/)
 and [token scopes](https://docs.gitlab.com/security/tokens/access_token_scopes/),
@@ -94,9 +159,11 @@ no OAuth JSON file needs to be placed in the repository.
 
 Share the GitHub repository link and grant access while it is private. A fresh
 clone contains all application code, prompts, dependency manifests, and install
-scripts. **No files from the original developer's machine need to be sent
-separately.** Each recipient supplies their own credentials and starts with
-their own empty local database.
+scripts. For the guided team setup, also share **only `.watson-setup.json`**
+as described above. Without that optional file, recipients can configure their
+own integrations manually. Each person starts with an empty local database
+and authorizes their own accounts; no developer database or personal tokens
+are needed.
 
 | Files or data | Where they come from |
 |---|---|
@@ -106,6 +173,7 @@ their own empty local database.
 | `~/Library/LaunchAgents/com.watson.local.plist` | Generated by the installer for that user's checkout. |
 | API keys and Google OAuth credentials | Supplied by the recipient and stored in macOS Keychain. |
 | `.watson-install.env` | Optional, created locally only for a private package mirror. |
+| `.watson-setup.json` | Optional private application configuration supplied by the team. Contains no personal access or refresh tokens. |
 
 Do not send your `.env`, `.npmrc`, `.watson-install.env`, live database, backups,
 logs, OAuth files, Keychain credentials, or browser profiles. Share through GitHub
@@ -192,6 +260,9 @@ Do not run it alongside the LaunchAgent on port 8000.
   run Sync now and inspect source health and Log.
 - **Google authorization fails:** verify the Desktop OAuth client, enabled
   Calendar API, and account/test-user permissions, then use Connect/Reconnect Google.
+- **GitLab sign-in does not start:** confirm the shared configuration is imported
+  and port 18765 is free. A cancelled browser flow times out after five minutes.
+  The GitLab app must be public, with `read_api` and the exact callback above.
 
 ## Verify a checkout
 

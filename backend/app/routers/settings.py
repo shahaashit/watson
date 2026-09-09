@@ -110,6 +110,24 @@ async def put_integration(source: str, request: Request, conn=Depends(get_db)):
     return {"integration": integration}
 
 
+@router.post('/settings/integrations/gitlab/connect', status_code=202)
+def connect_gitlab(conn=Depends(get_db)):
+    from ..services import gitlab_oauth
+    try:
+        return gitlab_oauth.start(conn)
+    except Exception:
+        raise HTTPException(409, 'Could not start GitLab sign-in. Check setup and that local port 18765 is available.') from None
+
+
+@router.get('/settings/integrations/gitlab/connect/{session_id}')
+def gitlab_connect_status(session_id: str):
+    from ..services import gitlab_oauth
+    try:
+        return gitlab_oauth.status(session_id)
+    except KeyError:
+        raise HTTPException(404, 'OAuth session not found.') from None
+
+
 @router.delete("/settings/integrations/{source}")
 def disconnect_integration(
     source: str,
@@ -160,6 +178,12 @@ def get_gitlab_projects(q: str = Query(default="", max_length=100), conn=Depends
             ) from None
     else:
         projects = settings_service.known_gitlab_projects(conn)
+        # Settings is an explicit setup action; work-page reads remain cached.
+        if not projects and gitlab_client.configured():
+            try:
+                projects = gitlab_client.list_accessible_projects()
+            except Exception:
+                raise HTTPException(503, 'Unable to load repositories from GitLab.') from None
     return {
         "projects": projects,
         "selected": settings_service.gitlab_projects(conn),

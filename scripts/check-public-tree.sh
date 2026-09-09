@@ -21,7 +21,7 @@ if ((${#tracked_files[@]})) && rg -n --no-heading '(/Users/[^/[:space:]]+|/home/
   failed=1
 fi
 
-sensitive_paths="$(git ls-files | rg -i '(^|/)([.]env$|[.]npmrc$|.*[.](pem|key|p12|pfx|db|sqlite|log)$|id_rsa|credentials[.]json|token[.]json)' || true)"
+sensitive_paths="$(git ls-files | rg -i '(^|/)([.]env$|[.]npmrc$|.*[.]watson-setup[.]json$|.*[.](pem|key|p12|pfx|db|sqlite|log)$|id_rsa|credentials[.]json|token[.]json)' || true)"
 if [[ -n "$sensitive_paths" ]]; then
   echo "Credential-bearing or local-data filenames are tracked:"
   echo "$sensitive_paths"

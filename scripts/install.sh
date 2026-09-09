@@ -6,8 +6,19 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 VENV="$ROOT/backend/.venv"
 COMPAT_FILE="${WATSON_INSTALL_COMPAT_FILE:-$ROOT/.watson-install.env}"
+SETUP_FILE="${WATSON_SETUP_FILE:-$ROOT/.watson-setup.json}"
 
 fail() { echo "error: $*" >&2; exit 1; }
+
+if [[ $# -gt 0 ]]; then
+  [[ $# -eq 2 && "$1" == "--setup" ]] || fail "Usage: ./scripts/install.sh [--setup /path/to/.watson-setup.json]"
+  [[ -f "$2" ]] || fail "Setup file not found."
+  SETUP_FILE="$(cd "$(dirname "$2")" && pwd -P)/$(basename "$2")"
+fi
+[[ -z "${WATSON_SETUP_FILE:-}" || -f "$SETUP_FILE" ]] || fail "Setup file not found."
+if [[ -f "$SETUP_FILE" ]]; then
+  SETUP_FILE="$(cd "$(dirname "$SETUP_FILE")" && pwd -P)/$(basename "$SETUP_FILE")"
+fi
 
 [[ "$(uname -s)" == "Darwin" ]] || fail "Watson's bootstrap currently supports macOS only."
 command -v python3 >/dev/null 2>&1 || fail "Python 3.10+ is required."
@@ -64,6 +75,9 @@ npm run build
 popd >/dev/null
 
 echo "==> Installing the local Watson service"
+if [[ -f "$SETUP_FILE" ]]; then
+  (cd "$ROOT/backend" && "$VENV/bin/python" -m app.auth.setup_bundle import "$SETUP_FILE")
+fi
 "$ROOT/scripts/install-launch-agent.sh"
 
 echo "Watson is ready. Finish private configuration in the onboarding screen."

@@ -82,6 +82,8 @@ export const api = {
   gitlabProjects: (query = '') => get('/api/settings/integrations/gitlab/projects' + (query ? `?q=${encodeURIComponent(query)}` : '')),
   saveGitlabProjects: (projectIds) => put('/api/settings/integrations/gitlab/projects', { project_ids: projectIds }),
   connectGoogleCalendar: () => post('/api/settings/integrations/google-calendar/connect'),
+  connectGitlab: () => post('/api/settings/integrations/gitlab/connect'),
+  gitlabConnectStatus: (sessionId) => get(`/api/settings/integrations/gitlab/connect/${encodeURIComponent(sessionId)}`),
   googleCalendarConnectStatus: (sessionId) => get(`/api/settings/integrations/google-calendar/connect/${encodeURIComponent(sessionId)}`),
   people: (options = {}) => get('/api/settings/people', options),
   savePerson: (person, personId) => personId == null

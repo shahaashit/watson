@@ -1,6 +1,8 @@
 .env
 .npmrc
 .watson-install.env
+.watson-setup.json
+*.watson-setup.json
 __pycache__/
 *.pyc
 .venv/

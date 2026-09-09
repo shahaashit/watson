@@ -23,6 +23,15 @@ log = logging.getLogger("watson.gitlab")
 
 TIMEOUT = 20
 
+
+def _get(url, **kwargs):
+    response = requests.get(url, **kwargs)
+    authorization = kwargs.get('headers', {}).get('Authorization', '')
+    if authorization.startswith('Bearer ') and response.status_code == 401:
+        from . import gitlab_oauth
+        gitlab_oauth.mark_unauthorized(authorization.removeprefix('Bearer '))
+    return response
+
 # Branches encode the related ClickUp task id after a `_clickup` tag, e.g.
 # `feature/foo_clickup_86d3by9x6` or `bugfix/_clickup-86abc/xyz`. We accept an
 # optional separator (`_`, `-`, `/`) and at least a few alphanumerics — the
@@ -87,11 +96,11 @@ def fetch_mr_by_path(path_with_namespace: str, iid, config=None):
     try:
         from urllib.parse import quote
         encoded = quote(path_with_namespace, safe="")
-        proj = requests.get(_api(f"/projects/{encoded}", config), headers=_headers(config),
+        proj = _get(_api(f"/projects/{encoded}", config), headers=_headers(config),
                             timeout=TIMEOUT)
         proj.raise_for_status()
         pid = proj.json()["id"]
-        r = requests.get(_api(f"/projects/{pid}/merge_requests/{iid}", config),
+        r = _get(_api(f"/projects/{pid}/merge_requests/{iid}", config),
                          headers=_headers(config), timeout=TIMEOUT)
         r.raise_for_status()
         mr = r.json()
@@ -168,12 +177,17 @@ def gitlab_config() -> dict:
             "integration.gitlab.username", settings.gitlab_username
         )
         token = secret_store.effective_secret("gitlab.token", settings.gitlab_token)
+        from . import gitlab_oauth
+        oauth_token = gitlab_oauth.access_token(base_url)
+        if oauth_token is not None:
+            token = oauth_token
     except Exception:
         return MappingProxyType({"base_url": "", "username": "", "token": ""})
     return MappingProxyType({
         "base_url": str(base_url or ""),
         "username": str(username or ""),
         "token": token,
+        **({"oauth": True} if oauth_token is not None else {}),
     })
 
 
@@ -203,6 +217,8 @@ def _api(path: str, config=None) -> str:
 
 def _headers(config=None) -> dict:
     config = _require_config(config)
+    if config.get('oauth'):
+        return {"Authorization": "Bearer " + config["token"]}
     return {"PRIVATE-TOKEN": config["token"]}
 
 
@@ -212,7 +228,7 @@ def current_username(config=None) -> str:
     username = config["username"].strip()
     if username:
         return username
-    resp = requests.get(
+    resp = _get(
         _api("/user", config), headers=_headers(config), timeout=TIMEOUT
     )
     resp.raise_for_status()
@@ -221,7 +237,7 @@ def current_username(config=None) -> str:
 
 def current_user(config=None) -> dict:
     config = _require_config(config)
-    resp = requests.get(
+    resp = _get(
         _api("/user", config), headers=_headers(config), timeout=TIMEOUT
     )
     resp.raise_for_status()
@@ -244,7 +260,7 @@ def _normalize_project(project) -> dict:
 def get_accessible_project(project_id: int, config=None) -> dict:
     """Resolve one accessible, non-archived project by stable GitLab id."""
     config = _require_config(config)
-    response = requests.get(
+    response = _get(
         _api(f"/projects/{project_id}", config),
         headers=_headers(config),
         timeout=TIMEOUT,
@@ -262,7 +278,7 @@ def list_accessible_projects(config=None, *, search="") -> list[dict]:
     projects = []
     page = 1
     while True:
-        response = requests.get(
+        response = _get(
             _api("/projects", config),
             headers=_headers(config),
             params={
@@ -295,7 +311,7 @@ def token_scopes(config=None) -> list:
     """Scopes on the configured token (read_api, api, …); [] if unavailable."""
     try:
         config = _require_config(config)
-        resp = requests.get(
+        resp = _get(
             _api("/personal_access_tokens/self", config),
             headers=_headers(config),
             timeout=TIMEOUT,
@@ -311,7 +327,7 @@ def drop_self_as_reviewer(mr_id: str, my_id: int, config=None) -> bool:
     was made, False if the user wasn't a reviewer. Raises on API/permission error."""
     config = _require_config(config)
     project_id, iid = mr_id.split("!")
-    r = requests.get(
+    r = _get(
         _api(f"/projects/{project_id}/merge_requests/{iid}", config),
         headers=_headers(config), timeout=TIMEOUT
     )
@@ -370,7 +386,7 @@ def _archived_project_ids(project_ids: set, config=None) -> set:
     archived = set()
     config = _require_config(config)
     for pid in project_ids:
-        r = requests.get(
+        r = _get(
             _api(f"/projects/{pid}", config),
             headers=_headers(config),
             timeout=TIMEOUT,
@@ -558,7 +574,7 @@ def _fetch_global_open(
         **(extra_params or {}),
     }
     while True:
-        response = requests.get(
+        response = _get(
             _api("/merge_requests", config),
             headers=_headers(config),
             params={**base, "page": page},
@@ -617,7 +633,7 @@ def _fetch_mr_dict(mr_id: str, role: str, config=None) -> dict | None:
     config = _require_config(config)
     try:
         pid, iid = mr_id.split("!", 1)
-        r = requests.get(_api(f"/projects/{pid}/merge_requests/{iid}", config),
+        r = _get(_api(f"/projects/{pid}/merge_requests/{iid}", config),
                          headers=_headers(config), timeout=TIMEOUT)
         r.raise_for_status()
         mr = r.json()
@@ -641,7 +657,7 @@ def fetch_engaged_mr_ids(after_iso: str, config=None) -> set:
     page = 1
     base = {"after": after_iso, "per_page": 100}
     while True:
-        resp = requests.get(
+        resp = _get(
             _api(f"/users/{user_id}/events", config), headers=_headers(config),
             params={**base, "page": page}, timeout=TIMEOUT,
         )
@@ -743,7 +759,7 @@ def _has_my_approval(mr_id: str, my_username: str, config=None) -> bool:
         return False
     config = _require_config(config)
     pid, iid = mr_id.split("!", 1)
-    r = requests.get(
+    r = _get(
         _api(f"/projects/{pid}/merge_requests/{iid}/notes", config),
         headers=_headers(config),
         params={"sort": "desc", "per_page": 30, "order_by": "created_at"},

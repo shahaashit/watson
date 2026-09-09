@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api.js'
 import GitLabProjectPicker from './GitLabProjectPicker.jsx'
+import GitLabConnect from './GitLabConnect.jsx'
 
 const INTEGRATIONS = [
   { source: 'anthropic', title: 'AI provider', hint: 'Capture classification and Ask need an AI provider.', secret: 'api_key', secretLabel: 'API key', fields: [['base_url', 'Base URL'], ['model', 'Model']] },
@@ -177,10 +178,18 @@ function IntegrationCard({ definition, integration, onChanged }) {
 
   return <article className="integration-settings-card">
     <header><div><h3>{title}</h3><p>{hint}</p></div><span className={`integration-state ${integration?.configured ? 'configured' : ''}`}>{stateLabel(integration)}</span></header>
+    {source === 'gitlab' && integration?.oauth_available && <>
+      <p>Application setup is ready for {integration.base_url}.</p>
+      <GitLabConnect connected={integration.oauth_connected} onConnected={onChanged} />
+    </>}
+    {source === 'google-calendar' && integration?.credential_present && <p>Application setup is ready. Use Connect Google to authorize your own account.</p>}
     <form className="settings-form integration-form" onSubmit={save}>
+      <details open={!(source === 'gitlab' && integration?.oauth_available) && !(source === 'google-calendar' && integration?.credential_present)}>
+      <summary>Manual connection settings</summary>
       {fields.map(([key, label]) => <label key={key}>{label}<input value={values[key] || ''} onChange={(event) => setValues((current) => ({ ...current, [key]: event.target.value }))} disabled={actionBusy} /></label>)}
       {secret && <label>{secretLabel}<textarea value={secretValue} onChange={(event) => setSecretValue(event.target.value)} placeholder={integration?.credential_present ? 'Stored credential present — enter a replacement only' : 'Enter once to save locally'} disabled={actionBusy} rows={source === 'google-calendar' ? 4 : 1} aria-describedby={`${source}-credential-note`} /></label>}
       {secret && <p className="settings-secret-note" id={`${source}-credential-note`}>{integration?.credential_present ? 'A credential is already present. This write-only field is blank until you choose to rotate it.' : 'This write-only value is stored locally in macOS Keychain.'}</p>}
+      </details>
       <div className="integration-actions">
         <button className="settings-primary" type="submit" disabled={actionBusy}>{busy === 'save' ? 'Saving…' : integration?.configured ? 'Save changes' : 'Save & connect'}</button>
         <button type="button" onClick={test} disabled={actionBusy || !integration?.configured}>{busy === 'test' ? 'Testing…' : 'Test connection'}</button>

@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "gitlab": {
+    "base_url": "https://gitlab.example.com",
+    "client_id": "REPLACE_WITH_PUBLIC_APPLICATION_ID",
+    "allow_http": false
+  },
+  "google_calendar": {
+    "installed": {
+      "client_id": "REPLACE_WITH_DESKTOP_CLIENT_ID",
+      "project_id": "example-project",
+      "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+      "token_uri": "https://oauth2.googleapis.com/token",
+      "client_secret": "REPLACE_WITH_DESKTOP_CLIENT_SECRET",
+      "redirect_uris": ["http://localhost"]
+    }
+  }
+}

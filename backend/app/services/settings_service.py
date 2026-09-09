@@ -57,7 +57,7 @@ _SOURCE_SETTING_KEYS = {
 
 _SOURCE_SECRET_KEYS = {
     "anthropic": ("anthropic.api_key",),
-    "gitlab": ("gitlab.token",),
+    "gitlab": ("gitlab.token", "gitlab.oauth"),
     "clickup": ("clickup.token",),
     "google-calendar": ("google.client_config", "google.authorized_user"),
     "flock": (),
@@ -229,6 +229,8 @@ def _anthropic_view(conn, fallback: Settings) -> dict:
 
 
 def _gitlab_view(conn, fallback: Settings) -> dict:
+    from . import gitlab_oauth
+    oauth = gitlab_oauth.view(conn)
     base_url = _effective(
         conn, "integration.gitlab.base_url", fallback.gitlab_base_url
     )
@@ -246,12 +248,13 @@ def _gitlab_view(conn, fallback: Settings) -> dict:
             for key, value in _common_view(
                 conn,
                 "gitlab",
-                credential_present=credential_present,
-                configured=bool(base_url and effective_token),
+                credential_present=credential_present or oauth['oauth_connected'],
+                configured=bool(base_url and (effective_token or oauth['oauth_connected'])) and not oauth['reauth_required'],
                 credential_unavailable=unavailable,
             ).items()
             if key != "source"
         },
+        **oauth,
     }
 
 
@@ -814,7 +817,13 @@ def _quarantine_managed_flock_profile(conn, fallback: Settings) -> dict[str, str
     return {"disconnect_state": state, "disconnect_guidance": guidance[state]}
 
 
-def update_integration(
+def update_integration(conn, source, payload, *, extra_secret_updates=None):
+    from . import gitlab_oauth
+    with gitlab_oauth.credential_lock():
+        return _update_integration(conn, source, payload, extra_secret_updates=extra_secret_updates)
+
+
+def _update_integration(
     conn,
     source: str,
     payload: BaseModel,
@@ -833,6 +842,9 @@ def update_integration(
     except KeyError:
         raise ValueError("unsupported integration source") from None
     secret_updates = _payload_secret_updates(source, payload)
+    if source == 'gitlab':
+        from . import gitlab_oauth
+        gitlab_oauth.invalidate()
     secret_updates.update(extra_secret_updates or {})
     _persist_disabled_tombstone(conn, source)
     try:
@@ -843,6 +855,9 @@ def update_integration(
         )
         for name, value in secret_updates.items():
             secret_store.set_secret(name, value)
+        if source == 'gitlab' and 'gitlab.token' in secret_updates:
+            secret_store.delete_secret('gitlab.oauth')
+            app_settings.delete(conn, 'integration.gitlab.pat_blocked', commit=False)
         # Even a host-only edit must prove the existing credential store is
         # readable before it can pair new non-secrets with an old credential.
         for name in _SOURCE_SECRET_KEYS[source]:
@@ -860,8 +875,17 @@ def update_integration(
 
 
 def disconnect_integration(conn, source: str) -> dict:
+    from . import gitlab_oauth
+    with gitlab_oauth.credential_lock():
+        return _disconnect_integration(conn, source)
+
+
+def _disconnect_integration(conn, source: str) -> dict:
     if source not in SOURCES:
         raise ValueError("unsupported integration source")
+    if source == 'gitlab':
+        from . import gitlab_oauth
+        gitlab_oauth.invalidate()
     fallback = _fresh_environment()
     _persist_disabled_tombstone(conn, source)
     disconnect_details = (
@@ -872,6 +896,8 @@ def disconnect_integration(conn, source: str) -> dict:
     try:
         conn.execute("BEGIN")
         for key in _SOURCE_SETTING_KEYS[source]:
+            if source == 'gitlab' and key == 'integration.gitlab.base_url' and app_settings.get(conn, 'integration.gitlab.oauth_client_id'):
+                continue
             app_settings.delete(conn, key, commit=False)
         app_settings.delete(
             conn, f"integration.{source}.health", commit=False

@@ -22,7 +22,10 @@ export default function LinkedWork({ links = [] }) {
       {groups.map((group) => <li className="linked-work-group" key={group.key}>
         <div className="linked-work-group-heading"><h3>{group.label}</h3><span>{group.links.length}</span></div>
         <ul className="linked-work-list">{group.links.map((link) => {
-          const url = safeExternalUrl(link.url)
+          const taskId = String(link.external_id ?? '').trim()
+          const fallbackUrl = link.source_type === 'clickup' && /^[a-zA-Z0-9]+$/.test(taskId)
+            ? `https://app.clickup.com/t/${taskId}` : ''
+          const url = safeExternalUrl(link.url) || fallbackUrl
           const label = sourceLabel(link, url)
           return <li key={link.id || `${link.source_type}-${link.external_id}`}>
             {url ? <a href={url} target="_blank" rel="noopener noreferrer">{label}<span className="sr-only"> (opens in a new tab)</span></a> : <span className="linked-work-missing">{label}</span>}

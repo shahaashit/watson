@@ -478,8 +478,11 @@ def run_browser_checks(ids: dict[str, int]) -> None:
                 assert page.locator('.work-inbox, .integration-health-toggle').count() == 0
                 assert page.get_by_role('button', name='Open Blair’s MR context').count() == 0, 'Team-owned work must stay outside My Work'
                 assert page.get_by_role('button', name='Refresh now', exact=True).count() == 0
+                assert page.get_by_text('Every 10 min', exact=True).count() == 0
                 page.get_by_role('button', name='Open utility menu').click()
-                assert page.get_by_role('menuitem', name='Sync now Refresh connected services').count() == 1
+                sync_action = page.get_by_role('menuitem', name='Sync now Every 10 min Refresh connected services')
+                assert sync_action.count() == 1
+                assert sync_action.get_by_text('Every 10 min', exact=True).is_visible()
                 page.get_by_role('button', name='Open utility menu').click()
                 page.locator(".nav-add-work").click()
                 page.get_by_role("button", name="Import link").click()

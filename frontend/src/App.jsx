@@ -99,7 +99,7 @@ export default function App() {
             </button>
             <button type="button" role="menuitem" disabled={manualSyncing || syncStatus?.running} onClick={() => { syncAll(); setSettingsOpen(false) }}>
               <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15.5 6.5V3.75h-2.75M4.5 13.5v2.75h2.75M14.7 7A5.25 5.25 0 0 0 5.2 6M5.3 13a5.25 5.25 0 0 0 9.5 1" /></svg>
-              <span><strong>Sync now</strong><small>Refresh connected services</small></span>
+              <span><span className="sync-menu-title"><strong>Sync now</strong><small>Every 10 min</small></span><small>Refresh connected services</small></span>
             </button>
           </div>}
         </div>
@@ -108,7 +108,6 @@ export default function App() {
     <div className="sync-status-strip" role="status" aria-live="polite">
       <span className={`sync-status-dot${syncStatus?.running || manualSyncing ? ' syncing' : ''}`} aria-hidden="true" />
       <span>{syncError || manualSyncError || (syncStatus?.running || manualSyncing ? 'Syncing connected services… Your cached work stays available.' : syncStatus?.last_sync_at ? `Last refreshed ${new Date(syncStatus.last_sync_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${syncStatus.last_sync_duration_seconds != null ? ` · ${Math.round(syncStatus.last_sync_duration_seconds)}s` : ''}${syncStatus.last_sync_error_count ? ' · Some updates failed — check Settings → Sync' : ''}` : 'Waiting for the first sync')}</span>
-      <span className="sync-status-cadence">Every 10 min</span>
     </div>
     {onboardingError && <div className="app-bootstrap-error" role="alert"><span>{onboardingError}</span><button type="button" onClick={loadOnboarding} disabled={onboardingLoading}>{onboardingLoading ? 'Retrying…' : 'Retry'}</button></div>}
     <main className="main">{renderView()}</main>

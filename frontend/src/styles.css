@@ -914,6 +914,8 @@ p, label { overflow-wrap: anywhere; }
 .nav-overflow-menu button > span { display: grid; gap: 2px; }
 .nav-overflow-menu strong { color: inherit; font-size: .82rem; font-weight: 600; }
 .nav-overflow-menu small { color: var(--text-faint); font-size: .69rem; }
+.sync-menu-title { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.sync-menu-title small { white-space: nowrap; }
 .route-placeholder { padding: 40px 0; color: var(--text-dim); }.route-placeholder h1 { color: var(--text); }
 @media (max-width: 760px) { .app { padding: 0 12px 80px; }.nav { gap: 2px; margin-bottom: 24px; padding: 7px; }.brand { margin-right: 5px; }.brand-text { display: none; }.nav-btn { padding: 7px 9px; font-size: .86rem; }.nav-actions { gap: 2px; border-color: transparent; background: transparent; }.nav-add-work { padding: 0 9px; font-size: .75rem; }.nav-search { width: 34px; padding: 0; }.nav-search span, .nav-search kbd { display: none; }.nav-overflow-menu { right: 0; } }
 @media (max-width: 540px) { .nav-add-work span { display: none; }.nav-add-work { width: 34px; padding: 0; }.nav-btn { padding-inline: 7px; } }
@@ -1950,9 +1952,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--violet); outlin
 }
 .sync-status-dot { width: 6px; height: 6px; flex-shrink: 0; border-radius: 50%; background: #08916f; }
 .sync-status-dot.syncing { background: #6554e8; animation: sync-pulse 1.5s ease-in-out infinite; }
-.sync-status-cadence { margin-left: auto; white-space: nowrap; }
 @keyframes sync-pulse { 50% { opacity: .35; } }
-@media (max-width: 600px) { .sync-status-cadence { display: none; } }
 
 /* Motion communicates loading or entry, never ambient decoration. */
 @media (prefers-reduced-motion: reduce) {

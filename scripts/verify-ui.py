@@ -462,6 +462,17 @@ def run_browser_checks(ids: dict[str, int]) -> None:
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         try:
+            startup = browser.new_page()
+            startup_requests = []
+            startup.on('request', lambda request: startup_requests.append(request.url))
+            startup.route('**/api/sync/status', lambda route: route.fulfill(json={
+                'running': False, 'last_sync_at': '2020-01-01T00:00:00Z', 'sources': [],
+            }))
+            startup.goto(f'{BASE_URL}/team', wait_until='networkidle')
+            startup.locator('.team-lanes').wait_for()
+            assert sum('/api/work-items/team' in url for url in startup_requests) == 1
+            assert not any('fonts.googleapis.com' in url or 'fonts.gstatic.com' in url for url in startup_requests)
+            startup.close()
             for width in (1440, 390):
                 page = browser.new_page(viewport={"width": width, "height": 900})
                 write_requests = []

@@ -1,5 +1,6 @@
 // One local status reader, with cancellable cache subscriptions. Never starts a sync.
 export function createSyncMonitor({ fetchStatus, visibility, schedule = setTimeout, cancel = clearTimeout }) {
+  const initializedAt = Date.now()
   let snapshot = { status: null, error: '' }
   const listeners = new Set()
   const readers = new Map()
@@ -30,8 +31,11 @@ export function createSyncMonitor({ fetchStatus, visibility, schedule = setTimeo
       const previous = snapshot.status
       snapshot = { status, error: '' }
       emit()
-      // The initial cache read may have preceded boot-sync completion.
-      if (!status.running && (!previous || previous.running || signature(previous) !== signature(status))) refresh()
+      // An idle baseline is not a completion event. Preserve the first cache
+      // request unless a sync actually completed while this page was starting.
+      const completedDuringStartup = !previous && [status.last_sync_at, ...(status.sources || []).map(source => source.last_success_at)]
+        .some(stamp => Date.parse(stamp) >= initializedAt)
+      if (!status.running && (completedDuringStartup || (previous && (previous.running || signature(previous) !== signature(status))))) refresh()
     } catch {
       if (active && visible()) {
         snapshot = { ...snapshot, error: 'Sync status unavailable. Showing cached data; reconnecting automatically.' }

@@ -49,12 +49,15 @@ export default function Onboarding({ initialState, onComplete }) {
       ...snapshot?.profile,
       auto_create_review_tasks: snapshot?.profile?.auto_create_review_tasks !== false,
       ai_group_review_mrs: snapshot?.profile?.ai_group_review_mrs !== false,
-    }} compact onSaved={(profile) => setSnapshot((value) => ({ ...value, profile }))} />
+    }} compact onSaved={async (profile) => {
+      setSnapshot((value) => ({ ...value, profile }))
+      await move(2)
+    }} />
     if (step === 2) return <IntegrationSettings integrations={snapshot?.integrations} compact onChanged={load} />
     if (step === 3) return <PeopleSettings compact />
     return <section className="onboarding-ready"><p className="eyebrow">Ready</p><h2>Your workspace is ready.</h2><p>Start with a note or a task. Connect more services whenever you’re ready.</p><SyncDataSettings data={snapshot?.data} compact /></section>
   }
 
   const nextLabel = step === 1 ? 'Continue to Integrations' : step === 2 ? 'Continue to People' : step === 3 ? 'Continue to Ready' : 'Start using Watson'
-  return <div className="onboarding-page"><header className="onboarding-header"><div className="onboarding-brand" aria-hidden="true">W</div><div><p className="eyebrow">Welcome to Watson</p><h1>A little setup. A clearer workday.</h1><p>Make space for your work, notes and team. Connections are optional; credentials stay secure in macOS Keychain.</p></div></header><ol className="onboarding-steps" aria-label="Onboarding progress">{STEPS.map((label, index) => <li key={label} className={index + 1 === step ? 'active' : index + 1 < step ? 'complete' : ''}><span>{index + 1}</span>{label}</li>)}</ol>{error && <p className="settings-error" role="alert">{error}</p>}<div className="onboarding-content">{current()}</div><footer className="onboarding-footer">{step > 1 ? <button type="button" onClick={() => move(step - 1)} disabled={moving}>Back</button> : <span />}{step === 4 ? <button className="settings-primary" type="button" onClick={finish} disabled={moving}>{moving ? 'Finishing…' : nextLabel}</button> : <button className="settings-primary" type="button" onClick={() => move(step + 1)} disabled={moving}>{moving ? 'Saving…' : nextLabel}</button>}</footer></div>
+return <div className="onboarding-page"><header className="onboarding-header"><div className="onboarding-brand" aria-hidden="true">W</div><div><p className="eyebrow">Welcome to Watson</p><h1>A little setup. A clearer workday.</h1><p>Make space for your work, notes and team. Connections are optional; credentials stay secure in macOS Keychain.</p></div></header><ol className="onboarding-steps" aria-label="Onboarding progress">{STEPS.map((label, index) => <li key={label} className={index + 1 === step ? 'active' : index + 1 < step ? 'complete' : ''}><span>{index + 1}</span>{label}</li>)}</ol>{error && <p className="settings-error" role="alert">{error}</p>}<div className="onboarding-content">{current()}</div><footer className="onboarding-footer">{step > 1 ? <button type="button" onClick={() => move(step - 1)} disabled={moving}>Back</button> : <span />}{step === 4 ? <button className="settings-primary" type="button" onClick={finish} disabled={moving}>{moving ? 'Finishing…' : nextLabel}</button> : step > 1 && <button className="settings-primary" type="button" onClick={() => move(step + 1)} disabled={moving}>{moving ? 'Saving…' : nextLabel}</button>}</footer></div>
 }

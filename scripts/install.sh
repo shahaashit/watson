@@ -9,6 +9,21 @@ COMPAT_FILE="${WATSON_INSTALL_COMPAT_FILE:-$ROOT/.watson-install.env}"
 SETUP_FILE="${WATSON_SETUP_FILE:-$ROOT/.watson-setup.json}"
 
 fail() { echo "error: $*" >&2; exit 1; }
+INSTALL_STARTED=$SECONDS
+timed() {
+  local label="$1" started=$SECONDS
+  shift
+  echo "==> $label"
+  "$@"
+  echo "    Finished in $((SECONDS - started))s"
+}
+
+compatible_python() {
+  "$1" - <<'PY' >/dev/null 2>&1
+import sys, venv, ensurepip
+raise SystemExit(0 if sys.version_info >= (3, 10) else 1)
+PY
+}
 
 if [[ $# -gt 0 ]]; then
   [[ $# -eq 2 && "$1" == "--setup" ]] || fail "Usage: ./scripts/install.sh [--setup /path/to/.watson-setup.json]"
@@ -21,17 +36,26 @@ if [[ -f "$SETUP_FILE" ]]; then
 fi
 
 [[ "$(uname -s)" == "Darwin" ]] || fail "Watson's bootstrap currently supports macOS only."
-command -v python3 >/dev/null 2>&1 || fail "Python 3.10+ is required."
 command -v npm >/dev/null 2>&1 || fail "Node 18+ and npm are required."
-
-python3 - <<'PY' || exit 1
-import sys
-if sys.version_info < (3, 10):
-    raise SystemExit("error: Python 3.10+ is required.")
-PY
-
 NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
 [[ "$NODE_MAJOR" =~ ^[0-9]+$ ]] && (( NODE_MAJOR >= 18 )) || fail "Node 18+ is required."
+if [[ -e "$VENV" ]] && ! compatible_python "$VENV/bin/python"; then
+  fail "Existing backend/.venv is incompatible. Move it aside and rerun; it has not been deleted."
+fi
+PYTHON=""
+for candidate in "$VENV/bin/python" python3 python3.13 python3.12 python3.11 python3.10 /opt/homebrew/bin/python3 /usr/local/bin/python3; do
+  if command -v "$candidate" >/dev/null 2>&1 && compatible_python "$candidate"; then
+    PYTHON="$(command -v "$candidate")"
+    break
+  fi
+done
+if [[ -z "$PYTHON" ]]; then
+  command -v brew >/dev/null 2>&1 || fail "Python 3.10+ with venv is required. Install Python from python.org (or Homebrew), then rerun. No system Python was modified."
+  timed "Installing missing Python with Homebrew" brew install python@3.12
+  PYTHON="$(brew --prefix python@3.12)/bin/python3.12"
+  compatible_python "$PYTHON" || fail "The installed Python is not compatible."
+fi
+echo "==> Using Python: $PYTHON"
 
 # Optional compatibility import for networks using a package mirror. Only
 # these three non-runtime variables are recognized; API tokens in .env are
@@ -48,32 +72,55 @@ fi
 
 if [[ ! -x "$VENV/bin/python" ]]; then
   echo "==> Creating Python environment"
-  python3 -m venv "$VENV"
+  "$PYTHON" -m venv "$VENV"
 fi
 
 PIP_ARGS=()
 [[ -n "${PIP_INDEX_URL:-}" ]] && PIP_ARGS+=(--index-url "$PIP_INDEX_URL")
 [[ -n "${PIP_TRUSTED_HOST:-}" ]] && PIP_ARGS+=(--trusted-host "$PIP_TRUSTED_HOST")
 
-echo "==> Installing backend dependencies"
 # Bash 3.2 treats an empty array as unset under nounset. Expand it only when
 # populated, preserving each argument without passing an empty string to pip.
-"$VENV/bin/python" -m pip install --upgrade pip ${PIP_ARGS[@]+"${PIP_ARGS[@]}"}
-"$VENV/bin/python" -m pip install -r "$ROOT/backend/requirements.txt" ${PIP_ARGS[@]+"${PIP_ARGS[@]}"}
-
-if "$VENV/bin/python" -c 'import playwright' >/dev/null 2>&1; then
-  echo "==> Installing Chromium for optional local-browser integrations"
-  "$VENV/bin/python" -m playwright install chromium
+if ! "$VENV/bin/python" -m pip --version >/dev/null 2>&1; then
+  timed "Bootstrapping missing pip in Watson's environment" "$VENV/bin/python" -m ensurepip
 fi
-
-echo "==> Installing and building the frontend"
-pushd "$ROOT/frontend" >/dev/null
-if [[ -n "${NPM_CONFIG_REGISTRY:-}" ]]; then
-  npm install --registry="$NPM_CONFIG_REGISTRY"
+BACKEND_HASH="$(shasum -a 256 "$ROOT/backend/requirements.txt")"
+BACKEND_STAMP="$VENV/.watson-requirements"
+if [[ -f "$BACKEND_STAMP" && "$(< "$BACKEND_STAMP")" == "$BACKEND_HASH" ]] && "$VENV/bin/python" "$ROOT/scripts/check-python-deps.py" "$ROOT/backend/requirements.txt" >/dev/null 2>&1; then
+  echo "==> Backend dependencies unchanged; reusing environment"
 else
-  npm install
+  timed "Installing backend dependencies" "$VENV/bin/python" -m pip install --disable-pip-version-check -r "$ROOT/backend/requirements.txt" ${PIP_ARGS[@]+"${PIP_ARGS[@]}"}
+  "$VENV/bin/python" -m pip check
+  printf '%s\n' "$BACKEND_HASH" > "$BACKEND_STAMP"
 fi
-npm run build
+# Chromium is not required for GitLab, ClickUp or Google OAuth. Developer
+# browser tests may install it explicitly; normal onboarding does not.
+
+pushd "$ROOT/frontend" >/dev/null
+FRONTEND_HASH="$(shasum -a 256 package.json package-lock.json) / node $NODE_MAJOR"
+FRONTEND_STAMP="$VENV/.watson-frontend-dependencies"
+if [[ -d node_modules && -f "$FRONTEND_STAMP" && "$(< "$FRONTEND_STAMP")" == "$FRONTEND_HASH" ]] && npm ls --depth=0 >/dev/null 2>&1; then
+  echo "==> Frontend dependencies unchanged; reusing node_modules"
+else
+  timed "Installing frontend dependencies" npm ci --prefer-offline --no-audit --no-fund
+  printf '%s\n' "$FRONTEND_HASH" > "$FRONTEND_STAMP"
+  # Dependency reinstalls must rebuild even when source files are unchanged.
+  rm -f "$VENV/.watson-frontend-build"
+fi
+BUILD_HASH="$(find . -type d \( -name node_modules -o -name dist \) -prune -o -type f -print0 | sort -z | xargs -0 shasum -a 256 | shasum -a 256)"
+BUILD_STAMP="$VENV/.watson-frontend-build"
+OUTPUT_STAMP="$VENV/.watson-frontend-output"
+OUTPUT_HASH=""
+if [[ -d dist ]]; then
+  OUTPUT_HASH="$(find dist -type f -print0 | sort -z | xargs -0 shasum -a 256 | shasum -a 256)"
+fi
+if [[ -f dist/index.html && -f "$BUILD_STAMP" && "$(< "$BUILD_STAMP")" == "$BUILD_HASH" && -f "$OUTPUT_STAMP" && "$(< "$OUTPUT_STAMP")" == "$OUTPUT_HASH" ]]; then
+  echo "==> Frontend unchanged; reusing build"
+else
+  timed "Building frontend" npm run build
+  printf '%s\n' "$BUILD_HASH" > "$BUILD_STAMP"
+  find dist -type f -print0 | sort -z | xargs -0 shasum -a 256 | shasum -a 256 > "$OUTPUT_STAMP"
+fi
 popd >/dev/null
 
 echo "==> Installing the local Watson service"
@@ -83,3 +130,4 @@ fi
 "$ROOT/scripts/install-launch-agent.sh"
 
 echo "Watson is ready. Finish private configuration in the onboarding screen."
+echo "Installation finished in $((SECONDS - INSTALL_STARTED))s."

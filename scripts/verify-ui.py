@@ -411,6 +411,49 @@ def run_refresh_checks(page, ids: dict[str, int]) -> None:
     assert not writes, f'Refresh verification attempted writes: {writes}'
 
 
+def run_onboarding_checks(browser) -> None:
+    page = browser.new_page(viewport={"width": 390, "height": 900})
+    writes = []
+    failed_once = False
+
+    def onboarding(route):
+        if route.request.method == 'PATCH':
+            writes.append('advance')
+            assert route.request.post_data_json == {'step': 2}
+        route.fulfill(json={'completed': False, 'step': 2 if writes and writes[-1] == 'advance' else 1})
+
+    def profile(route):
+        nonlocal failed_once
+        writes.append('save')
+        assert route.request.post_data_json['timezone'] == 'Asia/Kolkata'
+        if not failed_once:
+            failed_once = True
+            route.fulfill(status=500, json={'detail': 'Temporary test failure'})
+        else:
+            route.continue_()
+
+    page.route('**/api/onboarding', onboarding)
+    page.route('**/api/settings/profile', profile)
+    try:
+        page.goto(f'{BASE_URL}/onboarding', wait_until='networkidle')
+        page.get_by_label('Display name').fill('Sample User')
+        page.get_by_label('Timezone').select_option('Asia/Kolkata')
+        page.get_by_label('Email domain').fill('example.com')
+        assert page.get_by_role('button', name='Save profile', exact=True).count() == 0
+        submit = page.get_by_role('button', name='Continue to Integrations', exact=True)
+        assert submit.count() == 1
+        submit.click()
+        page.get_by_text('Could not save your profile. Check the values and try again.').wait_for()
+        assert writes == ['save'], 'A failed save must not advance onboarding'
+        submit.click()
+        page.locator('.integration-settings-card').first.wait_for()
+        assert writes == ['save', 'save', 'advance']
+        assert_no_horizontal_overflow(page, 'onboarding at 390px')
+        print('Onboarding verified: one submit, failure stays put, success saves before advancing', flush=True)
+    finally:
+        page.close()
+
+
 def run_browser_checks(ids: dict[str, int]) -> None:
     from playwright.sync_api import sync_playwright
 
@@ -587,6 +630,7 @@ def run_browser_checks(ids: dict[str, int]) -> None:
                 if width == 1440:
                     run_refresh_checks(page, ids)
                 page.close()
+            run_onboarding_checks(browser)
         finally:
             browser.close()
 

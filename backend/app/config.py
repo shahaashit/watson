@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     watson_backup_dir: str = "~/GoogleDrive/watson"
     digest_time: str = "09:30"
     digest_webhook_url: str = ""
-    tz: str = "UTC"
+    tz: str = "Asia/Kolkata"
     testing: bool = False
 
     # Google Calendar legacy import sources. Runtime OAuth credentials live in

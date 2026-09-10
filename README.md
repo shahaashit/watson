@@ -52,7 +52,12 @@ live connection status without resetting editable setup fields.
 ## Install on macOS
 
 Requirements: macOS, Git, Python 3.10 or newer, and Node 18 or newer with npm.
-Install these prerequisites before running the installer. Windows and Linux
+The installer reuses a compatible Python (including Watson's existing virtual
+environment). If none is found and Homebrew is available, it installs Python
+3.12; otherwise it explains how to install Python before retrying. Existing
+system Python and pip installations are not upgraded or modified. Missing pip
+is bootstrapped only inside Watson's isolated virtual environment. Node/npm and
+Git must already be installed. Windows and Linux
 are not supported by the current installer and macOS Keychain integration.
 
 While the repository is private, the owner must invite you as a collaborator;
@@ -69,6 +74,17 @@ The installer creates the backend virtual environment, installs backend and
 frontend dependencies, builds the frontend, installs the local LaunchAgent,
 waits for a localhost health check, and opens onboarding. It does not require
 an `.env` file or API tokens.
+
+Normal installation does not download Chromium. Unchanged backend dependencies,
+frontend dependencies, and frontend builds are reused on subsequent runs;
+changed requirements or source files trigger the corresponding step. Each
+install/build step reports its elapsed time. First installs still need to
+download packages, so network speed and package mirrors affect duration.
+
+Onboarding defaults to IST (`Asia/Kolkata`) with a timezone dropdown. Enter just
+your email domain (for `alex@example.com`, use `example.com`). **Continue to
+Integrations** validates and saves the profile before moving forward; there is
+no separate save step. Existing saved timezones remain unchanged.
 
 ### Colleague setup: one shared file
 

@@ -200,6 +200,45 @@ def test_activity_links_and_team_work_are_available(client):
     assert [lane["name"] for lane in team.json()["lanes"]][-2:] == ["Others", "Unassigned"]
 
 
+def test_team_board_leads_with_your_own_lane(client):
+    """Without a self lane the board would hide the owner's own work from the team view."""
+    item = client.post("/api/work-items", json={"title": "Mine"}).json()["work_item"]
+
+    lanes = client.get("/api/work-items/team").json()["lanes"]
+
+    assert lanes[0]["person"]["is_self"] is True
+    assert [work["id"] for work in lanes[0]["items"]] == [item["id"]]
+    assert [lane["name"] for lane in lanes][-2:] == ["Others", "Unassigned"]
+
+
+def test_me_mode_narrows_teammate_lanes_but_keeps_your_own_lane_whole(client, conn):
+    """Me mode filters on involvement, which your own authored work fails."""
+    person = client.post(
+        "/api/settings/people", json={"display_name": "Morgan", "identifier": "morgan"}
+    ).json()["person"]
+    mine = client.post("/api/work-items", json={"title": "Mine"}).json()["work_item"]
+    theirs = client.post(
+        "/api/work-items", json={"title": "Theirs", "owner_person_id": person["id"]}
+    ).json()["work_item"]
+    # Discovery origin is what makes Me mode consult involvement at all.
+    conn.execute(
+        "UPDATE work_items SET origin='discovery' WHERE id IN (?, ?)",
+        (mine["id"], theirs["id"]),
+    )
+    conn.commit()
+
+    lanes = {
+        lane["name"]: lane
+        for lane in client.get("/api/work-items/team?me_mode=true").json()["lanes"]
+    }
+
+    self_lane = next(
+        lane for lane in lanes.values() if (lane["person"] or {}).get("is_self")
+    )
+    assert [work["id"] for work in self_lane["items"]] == [mine["id"]]
+    assert lanes["Morgan"]["items"] == []
+
+
 def test_team_board_excludes_locally_ignored_discovered_work(client, conn):
     person = client.post(
         "/api/settings/people",

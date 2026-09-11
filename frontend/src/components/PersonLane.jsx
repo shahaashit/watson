@@ -135,7 +135,7 @@ export default function PersonLane({ lane, onItemsChange, onOpen }) {
   </div>
 
   return <section className="person-lane" aria-labelledby={`lane-${key}`} onMouseMove={previewFromMouse} onMouseUp={finishPointer} onMouseLeave={cancelPointer}>
-    <header className="person-lane-heading"><div className="person-lane-identity"><span className="person-avatar" aria-hidden="true">{initials}</span><div><h2 id={`lane-${key}`}>{lane.name}</h2><p>{lane.person ? 'Team member' : lane.name === 'Others' ? 'Other collaborators' : 'Without an owner'}</p></div></div><span>{items.length}</span></header>
+    <header className="person-lane-heading"><div className="person-lane-identity"><span className="person-avatar" aria-hidden="true">{initials}</span><div><h2 id={`lane-${key}`}>{lane.name}</h2><p>{lane.person ? (lane.person.is_self ? 'You' : 'Team member') : lane.name === 'Others' ? 'Other collaborators' : 'Without an owner'}</p></div></div><span>{items.length}</span></header>
     {notice && <p className="sr-only" aria-live="polite">{notice}</p>}
     {error && <p className="work-inline-error" role="alert">{error}</p>}
     <div className="person-lane-scroll" ref={scrollRef} onScroll={() => {

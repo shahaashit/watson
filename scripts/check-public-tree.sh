@@ -4,6 +4,14 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "$0")/.." && pwd -P)"
 cd "$repo_root"
 
+# Every check below greps with rg. A missing rg exits 127, which reads as
+# "no matches" inside an if-condition, so the whole gate would pass silently.
+if ! command -v rg >/dev/null 2>&1; then
+  echo "ripgrep (rg) is required by this check but is not installed." >&2
+  echo "Install it with: brew install ripgrep" >&2
+  exit 2
+fi
+
 failed=0
 private_paths="$(git ls-files | rg '^(\.superpowers/|docs/superpowers/)' || true)"
 if [[ -n "$private_paths" ]]; then

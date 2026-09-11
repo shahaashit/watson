@@ -81,7 +81,7 @@ def clean_db():
                   "gcal_events_cache", "flock_mentions_cache",
                   "flock_webhook_mentions", "flock_webhook_channels",
                   "flock_contacts",
-                  "system_events", "user_meta", "app_settings"):
+                  "notes", "system_events", "user_meta", "app_settings"):
         connection.execute(f"DELETE FROM {table}")
     connection.commit()
     connection.close()

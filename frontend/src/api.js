@@ -71,6 +71,12 @@ export const api = {
   resolveInbox: (id, workItemId) => post(`/api/work-inbox/${id}/resolve`, { work_item_id: workItemId }),
   dismissInbox: (id) => post(`/api/work-inbox/${id}/dismiss`),
 
+  // Scratch notes shown beside the boards. Local only; never classified.
+  notes: (options = {}) => get('/api/notes', options),
+  createNote: (body) => post('/api/notes', { body }),
+  updateNote: (id, body) => patch(`/api/notes/${id}`, { body }),
+  deleteNote: (id) => del(`/api/notes/${id}`),
+
   // Secrets supplied here are sent directly to the local API and are never
   // persisted by this client; settings responses only expose their presence.
   settings: () => get('/api/settings'),

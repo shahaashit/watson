@@ -189,6 +189,10 @@ class OnboardingPatch(StrictSettingsModel):
     step: Optional[int] = Field(default=None, ge=1, le=4)
 
 
+class NoteIn(BaseModel):
+    body: str = Field(min_length=1)
+
+
 class WorkInboxResolve(BaseModel):
     work_item_id: int
 

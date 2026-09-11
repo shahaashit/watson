@@ -266,6 +266,15 @@ CREATE TABLE IF NOT EXISTS work_inbox (
   resolved_at TIMESTAMP NULL
 );
 
+-- Scratch notes taken from the My Work and Team boards. Deliberately outside
+-- the capture pipeline: these are quick jottings, never classified by the LLM.
+CREATE TABLE IF NOT EXISTS notes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  body TEXT NOT NULL,
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_entries_capture ON entries(capture_id);
 CREATE INDEX IF NOT EXISTS idx_managed_status ON managed_tasks(status);
 CREATE INDEX IF NOT EXISTS idx_entries_created ON entries(created_at);

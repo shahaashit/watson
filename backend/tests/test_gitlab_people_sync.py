@@ -87,6 +87,82 @@ def test_tracked_gitlab_usernames_returns_only_explicit_tracked_identities(conn)
     assert gitlab_client.tracked_gitlab_usernames(conn) == ["morgan.dev"]
 
 
+@pytest.mark.parametrize('second_state,retired', [('merged', 1), ('closed', 1), ('opened', 0)])
+def test_discovered_team_work_refreshes_missing_links_before_retirement(conn, monkeypatch, second_state, retired):
+    from app.services import work_items, work_ingestion
+    _add_identity(conn, 'Morgan', 'morgan.dev')
+    owner = conn.execute("SELECT id FROM people WHERE display_name='Morgan'").fetchone()['id']
+    item = work_items.create_work_item(conn, title='Related changes', origin='discovery', owner_person_id=owner)
+    for iid in (71, 72):
+        work_items.add_work_link(conn, item['id'], source_type='gitlab_mr', external_id=f'41!{iid}')
+    work_items.add_work_link(conn, item['id'], source_type='clickup', external_id='exampletask')
+    _patch_successful_required_discovery(monkeypatch)
+    monkeypatch.setattr(gitlab_client, 'fetch_engaged_mr_ids', lambda *args: set())
+    monkeypatch.setattr(gitlab_client, '_has_my_approval', lambda *args: False)
+    fetched = []
+
+    def fetch(mr_id, role, config=None):
+        fetched.append(mr_id)
+        raw = _mr(iid=int(mr_id.split('!')[1]), assignees=(), reviewers=())
+        raw['state'] = 'closed' if mr_id == '41!71' else second_state
+        return gitlab_client._normalize_mr(raw, role)
+
+    monkeypatch.setattr(gitlab_client, '_fetch_mr_dict', fetch)
+    gitlab_client.sync(conn)
+    assert set(fetched) == {'41!71', '41!72'}
+    assert work_ingestion.retire_terminal_mr_work(conn) == retired
+    assert conn.execute('SELECT count(*) FROM work_links WHERE work_item_id=?', (item['id'],)).fetchone()[0] == 3
+    assert 'reviewer' not in json.loads(conn.execute("SELECT roles FROM gitlab_mrs_cache WHERE mr_id='41!72'").fetchone()[0])
+
+
+def test_automatic_reference_scope_excludes_untracked_completed_and_unselected(conn):
+    from app.services import work_items
+    _add_identity(conn, 'Morgan', 'morgan.dev')
+    owner = conn.execute("SELECT id FROM people WHERE display_name='Morgan'").fetchone()['id']
+    for iid, origin, state, project, person in [
+        (1, 'discovery', 'next', 41, owner),
+        (2, 'discovery', 'done', 41, owner),
+        (3, 'ignored', 'next', 41, owner),
+        (4, 'discovery', 'next', 52, owner),
+        (5, 'discovery', 'next', 41, None),
+    ]:
+        item = work_items.create_work_item(conn, title='Synthetic work', origin=origin, state=state, owner_person_id=person)
+        work_items.add_work_link(conn, item['id'], source_type='gitlab_mr', external_id=f'{project}!{iid}')
+    assert gitlab_client._active_discovered_mr_ids(conn, {'41'}) == {'41!1'}
+
+
+def test_failed_discovered_link_lookup_does_not_retire_work_or_replace_cache(conn, monkeypatch):
+    from app.services import work_items, work_ingestion
+    _add_identity(conn, 'Morgan', 'morgan.dev')
+    owner = conn.execute("SELECT id FROM people WHERE display_name='Morgan'").fetchone()['id']
+    item = work_items.create_work_item(conn, title='Unknown lifecycle', origin='discovery', owner_person_id=owner)
+    work_items.add_work_link(conn, item['id'], source_type='gitlab_mr', external_id='41!71')
+    conn.execute("INSERT INTO gitlab_mrs_cache (mr_id,title,state,role,synced_at) VALUES ('41!71','Existing cache','opened','author','before')")
+    conn.commit()
+    _patch_successful_required_discovery(monkeypatch)
+    monkeypatch.setattr(gitlab_client, '_fetch_mr_dict', lambda *args: None)
+    with pytest.raises(RuntimeError, match='linked merge request refresh failed'):
+        gitlab_client.sync(conn)
+    assert conn.execute("SELECT state FROM gitlab_mrs_cache WHERE mr_id='41!71'").fetchone()[0] == 'opened'
+    assert work_ingestion.retire_terminal_mr_work(conn) == 0
+    assert conn.execute('SELECT origin FROM work_items WHERE id=?', (item['id'],)).fetchone()[0] == 'discovery'
+
+
+def test_archived_project_is_not_resurrected_by_discovered_reference(conn, monkeypatch):
+    from app.services import work_items
+    _add_identity(conn, 'Morgan', 'morgan.dev')
+    owner = conn.execute("SELECT id FROM people WHERE display_name='Morgan'").fetchone()['id']
+    item = work_items.create_work_item(conn, title='Archived project work', origin='discovery', owner_person_id=owner)
+    work_items.add_work_link(conn, item['id'], source_type='gitlab_mr', external_id='41!71')
+    _patch_successful_required_discovery(monkeypatch)
+    monkeypatch.setattr(gitlab_client, 'fetch_engaged_mr_ids', lambda *args: set())
+    monkeypatch.setattr(gitlab_client, '_archived_project_ids', lambda *args: {'41'})
+    def unexpected_fetch(*args):
+        pytest.fail('Archived automatic reference must not be fetched')
+    monkeypatch.setattr(gitlab_client, '_fetch_mr_dict', unexpected_fetch)
+    assert gitlab_client.sync(conn) == 0
+
+
 def test_accessible_projects_are_paginated_and_normalized(monkeypatch):
     calls = []
 

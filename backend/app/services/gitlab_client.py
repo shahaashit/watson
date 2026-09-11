@@ -812,6 +812,33 @@ def _compute_stages(row: dict, reviewed_by_me: bool) -> list:
     return tags
 
 
+def _active_discovered_mr_ids(conn, selected_ids: set[str] | None = None) -> set[str]:
+    """Keep lifecycle state for active, in-scope discovered work complete.
+
+    Closed MRs disappear from open-MR discovery. Their absence must not leave
+    linked cards permanently unknown, nor resurrect unrelated historical work.
+    """
+    from . import work_items
+
+    referenced = set()
+    for item in conn.execute(
+        "SELECT wi.*, p.is_self, p.is_tracked FROM work_items wi "
+        "LEFT JOIN people p ON p.id=wi.owner_person_id "
+        "WHERE wi.origin='discovery' AND wi.state != 'done' "
+        "AND wi.completed_at IS NULL"
+    ).fetchall():
+        if not (item['is_self'] or item['is_tracked'] or work_items._discovery_is_team_relevant(conn, item)):
+            continue
+        referenced.update(
+            row['external_id'] for row in conn.execute(
+                "SELECT external_id FROM work_links WHERE work_item_id=? "
+                "AND source_type='gitlab_mr' AND TRIM(external_id) <> ''",
+                (item['id'],),
+            ) if _project_is_selected(row['external_id'], selected_ids)
+        )
+    return referenced
+
+
 def _referenced_mr_ids(conn, selected_ids: set[str] | None = None) -> set[str]:
     referenced = set()
     for row in conn.execute(
@@ -927,9 +954,14 @@ def sync(conn) -> int:
                 continue
             merged_by_id[mr_id] = _merge_mr(merged_by_id.get(mr_id), row)
 
+    discovered_references = _active_discovered_mr_ids(conn, selected_ids)
     archived = _archived_project_ids(
-        {mr_id.split("!", 1)[0] for mr_id in merged_by_id}, config
+        {mr_id.split("!", 1)[0] for mr_id in set(merged_by_id) | discovered_references}, config
     )
+    discovered_references = {
+        mr_id for mr_id in discovered_references
+        if mr_id.split("!", 1)[0] not in archived
+    }
     for mr_id in list(merged_by_id):
         if mr_id.split("!", 1)[0] in archived:
             del merged_by_id[mr_id]
@@ -942,11 +974,13 @@ def sync(conn) -> int:
     referenced = _referenced_mr_ids(conn, selected_ids)
     fetched_ids = set(merged_by_id)
     referenced_added = 0
-    for mr_id in referenced - fetched_ids:
-        row = _fetch_mr_dict(mr_id, "reviewer", config)
+    for mr_id in sorted((referenced | discovered_references) - fetched_ids):
+        row = _fetch_mr_dict(mr_id, "reviewer" if mr_id in referenced else "author", config)
         if not row:
             raise RuntimeError("GitLab linked merge request refresh failed")
-        row["_self_roles"] = ["reviewer"]
+        # Tracking a teammate's card is not evidence that the local user is
+        # its reviewer. Preserve the legacy explicit-reference behavior only.
+        row["_self_roles"] = ["reviewer"] if mr_id in referenced else _self_roles_for_row(row, username)
         merged_by_id[mr_id] = _merge_mr(merged_by_id.get(mr_id), row)
         fetched_ids.add(mr_id)
         referenced_added += 1

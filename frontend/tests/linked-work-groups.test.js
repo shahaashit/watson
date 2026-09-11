@@ -2,6 +2,16 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { renderJsx } from './renderJsx.js'
 
+test('MR anchors display repository names and keep their original destinations', async () => {
+  const url = 'https://gitlab.example.com/platform/service-api/-/merge_requests/42'
+  const markup = await renderJsx('src/components/LinkedWork.jsx', {
+    links: [{ source_type: 'gitlab_mr', external_id: '1!42', url, label: 'Long task title' }],
+  })
+  assert.ok(markup.includes(`href="${url}"`))
+  assert.match(markup, />service-api<span/)
+  assert.doesNotMatch(markup, />Long task title</)
+})
+
 test('ClickUp links remain clickable when their cached URL is missing', async () => {
   for (const url of ['', null, undefined]) {
     const markup = await renderJsx('src/components/LinkedWork.jsx', {

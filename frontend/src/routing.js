@@ -4,8 +4,7 @@ const WORK_ID_PATTERN = /^[1-9][0-9]{0,14}$/
 export function parseRoute(pathname) {
   const path = pathname.replace(/\/+$/, '') || '/'
 
-  if (path === '/' || path === '/my-work') return { view: 'my-work' }
-  if (path === '/team') return { view: 'team' }
+  if (path === '/' || path === '/home' || path === '/team') return { view: 'home' }
   if (path === '/log') return { view: 'log' }
   if (path === '/onboarding') return { view: 'onboarding' }
   if (path === '/settings') return { view: 'settings' }
@@ -20,7 +19,7 @@ export function parseRoute(pathname) {
     return { view: 'settings', section: settingsMatch[1] }
   }
 
-  return { view: 'my-work' }
+  return { view: 'home' }
 }
 
 export function navigate(path, state = {}) {

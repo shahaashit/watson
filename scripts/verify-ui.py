@@ -322,8 +322,7 @@ def run_refresh_checks(page, ids: dict[str, int]) -> None:
         return value
 
     scenarios = [
-        ('My Work', '/my-work', '/api/work-items/my', 'Prepare the weekly delivery note'),
-        ('Team', '/team', '/api/work-items/team*', 'Blair’s MR context'),
+        ('Home', '/', '/api/work-items/team*', 'Blair’s MR context'),
         ('Log', '/log', '/api/log*', None),
         ('Work Detail', f"/work/{ids['mine']}", f"/api/work-items/{ids['mine']}",
          'Prepare the weekly delivery note'),
@@ -355,10 +354,9 @@ def run_refresh_checks(page, ids: dict[str, int]) -> None:
                     page.goto(BASE_URL + path, wait_until='networkidle')
                 assert baseline.value.json()['running'] is False
                 expect(page.get_by_text(f'Refresh {label} revision 0', exact=True)).to_be_visible()
-                if label == 'My Work':
+                if label == 'Home':
                     draft = page.get_by_placeholder('Capture a thought or ask Watson…')
-                    draft.fill('Unsaved My Work capture')
-                elif label == 'Team':
+                    draft.fill('Unsaved Home capture')
                     lane = page.locator('.person-lane').filter(
                         has=page.get_by_role('heading', name='Alex Chen', exact=True))
                     scroll = lane.locator('.person-lane-scroll')
@@ -390,10 +388,9 @@ def run_refresh_checks(page, ids: dict[str, int]) -> None:
                         state['last_sync_at'] = '2026-01-01T00:01:00'
                     state.update(running=False, revision=revision)
                     expect(page.get_by_text(f'Refresh {label} revision {revision}', exact=True)).to_be_visible(timeout=8000)
-                    if label == 'My Work':
-                        expect(draft).to_have_value('Unsaved My Work capture')
-                    elif label == 'Team':
-                        assert abs(scroll.evaluate('node => node.scrollTop') - scroll_top) <= 1, 'Refresh reset Team lane scroll'
+                    if label == 'Home':
+                        expect(draft).to_have_value('Unsaved Home capture')
+                        assert abs(scroll.evaluate('node => node.scrollTop') - scroll_top) <= 1, 'Refresh reset Home lane scroll'
                     elif label == 'Log':
                         expect(search).to_have_value('Keep this plan')
                         expect(page.get_by_role('button', name='Work context', exact=True)).to_have_class('chip filter active')
@@ -414,7 +411,7 @@ def run_refresh_checks(page, ids: dict[str, int]) -> None:
 def run_browser_checks(ids: dict[str, int]) -> None:
     from playwright.sync_api import sync_playwright
 
-    routes = ["/my-work", "/team", f"/work/{ids['mine']}", "/settings", "/log",
+    routes = ["/", "/team", f"/work/{ids['mine']}", "/settings", "/log",
               "/settings/integrations", "/settings/people", "/settings/sync", "/settings/data"]
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
@@ -439,7 +436,7 @@ def run_browser_checks(ids: dict[str, int]) -> None:
                         "getComputedStyle(document.documentElement).colorScheme"
                     ) == "light", "All views should use the light theme"
                 assert page.locator(".nav-btn").all_inner_texts() == [
-                    "My Work", "Team", "Log"
+                    "Home"
                 ], "review automation must not add a navigation tab"
 
                 page.goto(f"{BASE_URL}/settings/integrations", wait_until="networkidle")
@@ -459,24 +456,16 @@ def run_browser_checks(ids: dict[str, int]) -> None:
                 assert ai_card.get_by_label('Base URL', exact=True).input_value() == 'https://go.fastrouter.ai'
                 assert_no_horizontal_overflow(page, f'AI setup at {width}px')
 
-                page.goto(f"{BASE_URL}/my-work", wait_until="networkidle")
-                page.wait_for_selector(".personal-task-row", timeout=5000)
-                assert page.locator(".personal-task-row").count() >= 2, "My Work should contain real personal work"
+                page.goto(f"{BASE_URL}/", wait_until="networkidle")
+                page.wait_for_selector(".person-lane-card", timeout=5000)
                 assert page.get_by_role(
                     "button", name="Open Review - Semantic rollout (Alex Chen)"
-                ).count() == 0, "review tracking belongs outside My Work"
-                assert page.get_by_role("heading", name="My tasks").count() == 1
-                assert page.locator('a[href="https://app.clickup.com/t/86d3sample"]').count() == 1
+                ).count() == 0, "review tracking stays out of the board"
                 assert page.locator(".work-card-state").count() == 0
-                my_title_style = page.locator(".personal-task-title").first.evaluate(
-                    "node => ({ clamp: getComputedStyle(node).webkitLineClamp, whiteSpace: getComputedStyle(node).whiteSpace })"
-                )
-                assert my_title_style == {"clamp": "3", "whiteSpace": "normal"}
                 assert "Historical completed sample" not in page.locator("body").inner_text()
-                assert page.locator(".schedule-strip").count() == 1, "My Work should keep a compact schedule"
+                assert page.locator(".schedule-strip").count() == 1, "Home should keep a compact schedule"
                 assert page.get_by_role("region", name="Watson suggestions").count() == 0
                 assert page.locator('.work-inbox, .integration-health-toggle').count() == 0
-                assert page.get_by_role('button', name='Open Blair’s MR context').count() == 0, 'Team-owned work must stay outside My Work'
                 assert page.get_by_role('button', name='Refresh now', exact=True).count() == 0
                 assert page.get_by_text('Every 10 min', exact=True).count() == 0
                 page.get_by_role('button', name='Open utility menu').click()
@@ -484,13 +473,22 @@ def run_browser_checks(ids: dict[str, int]) -> None:
                 assert sync_action.count() == 1
                 assert sync_action.get_by_text('Every 10 min', exact=True).is_visible()
                 page.get_by_role('button', name='Open utility menu').click()
+                assert page.get_by_placeholder('Capture a thought or ask Watson…').is_editable(), "capture must stay reachable"
                 page.locator(".nav-add-work").click()
-                page.get_by_role("button", name="Import link").click()
-                assert page.get_by_label("GitLab MR or ClickUp task URL").is_editable(), "manual external import must be reachable"
+                dialog = page.get_by_role("dialog", name="Add work")
+                assert dialog.get_by_label("Title").is_editable(), "adding local work must be reachable"
+                assert dialog.get_by_label("Description optional").is_editable()
+                dialog.get_by_role("button", name="Import link").click()
+                assert dialog.get_by_label("GitLab MR or ClickUp task URL").is_editable(), "manual external import must be reachable"
+                dialog.get_by_role("button", name="Cancel").click()
+                assert page.get_by_role("dialog", name="Add work").count() == 0
                 assert page.locator('.sync-status-strip').count() == 1
 
                 page.goto(f"{BASE_URL}/team", wait_until="networkidle")
                 assert page.get_by_role('button', name='Refresh', exact=True).count() == 0
+                self_lane = page.locator('.person-lane.is-self')
+                assert self_lane.count() == 1, "your own lane should stand out"
+                assert self_lane.locator('.person-lane-add').count() == 1, "your lane should offer a quick add"
                 for lane_name in ("Alex Chen", "Blair Lee", "Others", "Unassigned"):
                     assert page.get_by_role("heading", name=lane_name).count() == 1
                 scrolls = page.locator(".person-lane-scroll")
@@ -538,8 +536,8 @@ def run_browser_checks(ids: dict[str, int]) -> None:
                 clickup_link = page.locator(f'a[href="{clickup_url}"]')
                 assert clickup_link.count() == 1
                 assert clickup_link.inner_text().strip().startswith(clickup_url)
-                page.get_by_role("button", name="Back to My Work").click()
-                page.wait_for_url(f"{BASE_URL}/my-work")
+                page.get_by_role("button", name="Back to Home").click()
+                page.wait_for_url(f"{BASE_URL}/")
 
                 page.goto(f"{BASE_URL}/settings", wait_until="networkidle")
                 page.get_by_role("heading", name="Make Watson yours.").wait_for()

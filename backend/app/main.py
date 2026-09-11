@@ -204,7 +204,7 @@ if _ASSETS.is_dir():
 
 _SPA_PATHS = {
     "",
-    "my-work",
+    "home",
     "team",
     "log",
     "settings",

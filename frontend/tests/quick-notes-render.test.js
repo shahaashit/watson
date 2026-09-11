@@ -26,23 +26,19 @@ test('The notes toggle preference survives a page refresh', () => {
   assert.equal(notesPanel.readNotesOpen(storage), false)
 })
 
-test('A closed notes panel claims no column on either board', async () => {
-  for (const view of ['src/views/MyWork.jsx', 'src/views/Team.jsx']) {
-    const html = await withStorage('false', () => renderJsx(view))
-    assert.match(html, /class="board-split"/, view)
-    assert.doesNotMatch(html, /with-notes|notes-panel/, view)
-    assert.match(html, /class="notes-toggle"[^>]*aria-pressed="false"/, view)
-  }
+test('A closed notes panel claims no column on the board', async () => {
+  const html = await withStorage('false', () => renderJsx('src/views/Team.jsx'))
+  assert.match(html, /class="board-split"/)
+  assert.doesNotMatch(html, /with-notes|notes-panel/)
+  assert.match(html, /class="notes-toggle"[^>]*aria-pressed="false"/)
 })
 
-test('An open notes panel splits the board grid on either board', async () => {
-  for (const view of ['src/views/MyWork.jsx', 'src/views/Team.jsx']) {
-    const html = await withStorage('true', () => renderJsx(view))
-    assert.match(html, /class="board-split with-notes"/, view)
-    assert.match(html, /<aside class="notes-panel"[^>]*aria-label="Quick notes"/, view)
-    assert.match(html, /class="notes-toggle active"[^>]*aria-pressed="true"/, view)
-    assert.match(html, /Jot something down/, view)
-  }
+test('An open notes panel splits the board grid', async () => {
+  const html = await withStorage('true', () => renderJsx('src/views/Team.jsx'))
+  assert.match(html, /class="board-split with-notes"/)
+  assert.match(html, /<aside class="notes-panel"[^>]*aria-label="Quick notes"/)
+  assert.match(html, /class="notes-toggle active"[^>]*aria-pressed="true"/)
+  assert.match(html, /Jot something down/)
 })
 
 test('The team board labels your own lane as yours', async () => {

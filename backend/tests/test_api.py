@@ -76,7 +76,7 @@ def test_spa_fallback_does_not_mask_unknown_or_api_paths(client, monkeypatch, tm
     monkeypatch.setattr(main, "_DIST", dist)
 
     assert client.get("/unknown", headers={"accept": "text/html"}).status_code == 404
-    assert client.get("/my-work", headers={"accept": "application/json"}).status_code == 404
+    assert client.get("/home", headers={"accept": "application/json"}).status_code == 404
     assert client.get("/api/not-a-route", headers={"accept": "text/html"}).status_code == 404
     assert client.get("/assets/missing.js").status_code == 404
 
@@ -85,7 +85,7 @@ def test_spa_fallback_does_not_mask_unknown_or_api_paths(client, monkeypatch, tm
     ("path", "status"),
     [
         ("/", 200),
-        ("/my-work///", 200),
+        ("/home///", 200),
         ("/team", 200),
         ("/work/42///", 200),
         ("/log", 200),

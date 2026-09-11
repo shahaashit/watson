@@ -55,7 +55,6 @@ export const api = {
   search: (q, options = {}) => get('/api/search?q=' + encodeURIComponent(q || ''), options),
 
   // Local work board. These routes never write to ClickUp or GitLab.
-  myWork: (options = {}) => get('/api/work-items/my', options),
   teamWork: ({ meMode = false, ...options } = {}) => get(
     '/api/work-items/team' + (meMode ? '?me_mode=true' : ''),
     options,

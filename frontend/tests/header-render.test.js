@@ -4,7 +4,7 @@ import { renderJsx } from './renderJsx.js'
 
 test('the header renders one balanced action cluster in the approved order', async () => {
   const originalWindow = global.window
-  global.window = { location: { pathname: '/my-work' } }
+  global.window = { location: { pathname: '/' } }
 
   try {
     const markup = await renderJsx('src/App.jsx')

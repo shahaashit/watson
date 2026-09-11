@@ -10,18 +10,16 @@ const KIND_LABEL = {
 
 function buildActions(setView, syncAll, addWork, navigateTo) {
   return [
-    { id: 'a-my-work', icon: '📋', title: 'My Work',
-      subtitle: 'Your prioritized work', keywords: 'today home work', run: () => setView('my-work') },
-    { id: 'a-team', icon: '👥', title: 'Team',
-      subtitle: 'Tracked people and their work', keywords: 'team people lanes', run: () => setView('team') },
+    { id: 'a-home', icon: '👥', title: 'Home',
+      subtitle: 'Your team board and your work', keywords: 'home team people lanes work', run: () => setView('home') },
     { id: 'a-add-work', icon: '＋', title: 'Add Work',
       subtitle: 'Add something to your workspace', keywords: 'create new work task', run: () => addWork() },
     { id: 'a-capture', icon: '📝', title: 'Capture',
       subtitle: 'Focus the capture box', keywords: 'capture note new',
-      run: () => { setView('my-work'); window.setTimeout(() => window.dispatchEvent(new Event('watson:focus-capture')), 0) } },
+      run: () => { setView('home'); window.setTimeout(() => window.dispatchEvent(new Event('watson:focus-capture')), 0) } },
     { id: 'a-ask', icon: '🔍', title: 'Ask Watson',
       subtitle: 'Question your log', keywords: 'ask query search question',
-      run: () => { setView('my-work'); window.setTimeout(() => window.dispatchEvent(new Event('watson:focus-ask')), 0) } },
+      run: () => { setView('home'); window.setTimeout(() => window.dispatchEvent(new Event('watson:focus-ask')), 0) } },
     { id: 'a-sync', icon: '⏱', title: 'Sync now',
       subtitle: 'Refresh ClickUp + GitLab + Calendar', keywords: 'sync refresh',
       run: () => { syncAll() } },

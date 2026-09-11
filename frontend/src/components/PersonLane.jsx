@@ -13,7 +13,7 @@ function itemOwnerKey(item) {
   return item.owner_person_id != null ? `person:${item.owner_person_id}` : `display:${item.owner_display || ''}`
 }
 
-export default function PersonLane({ lane, onItemsChange, onOpen }) {
+export default function PersonLane({ lane, onItemsChange, onOpen, onAdd }) {
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
   const [hasOverflow, setHasOverflow] = useState(false)
@@ -134,8 +134,8 @@ export default function PersonLane({ lane, onItemsChange, onOpen }) {
     <WorkCard item={item} onOpen={openCard} wholeCardDrag onMouseDown={beginPointer} />
   </div>
 
-  return <section className="person-lane" aria-labelledby={`lane-${key}`} onMouseMove={previewFromMouse} onMouseUp={finishPointer} onMouseLeave={cancelPointer}>
-    <header className="person-lane-heading"><div className="person-lane-identity"><span className="person-avatar" aria-hidden="true">{initials}</span><div><h2 id={`lane-${key}`}>{lane.name}</h2><p>{lane.person ? (lane.person.is_self ? 'You' : 'Team member') : lane.name === 'Others' ? 'Other collaborators' : 'Without an owner'}</p></div></div><span>{items.length}</span></header>
+  return <section className={`person-lane${lane.person?.is_self ? ' is-self' : ''}`} aria-labelledby={`lane-${key}`} onMouseMove={previewFromMouse} onMouseUp={finishPointer} onMouseLeave={cancelPointer}>
+    <header className="person-lane-heading"><div className="person-lane-identity"><span className="person-avatar" aria-hidden="true">{initials}</span><div><h2 id={`lane-${key}`}>{lane.name}</h2><p>{lane.person ? (lane.person.is_self ? 'You' : 'Team member') : lane.name === 'Others' ? 'Other collaborators' : 'Without an owner'}</p></div></div><div className="person-lane-meta">{onAdd && <button type="button" className="person-lane-add" onClick={onAdd} aria-label={`Add work for ${lane.name}`} title="Add work">+</button>}<span>{items.length}</span></div></header>
     {notice && <p className="sr-only" aria-live="polite">{notice}</p>}
     {error && <p className="work-inline-error" role="alert">{error}</p>}
     <div className="person-lane-scroll" ref={scrollRef} onScroll={() => {

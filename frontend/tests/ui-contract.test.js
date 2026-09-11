@@ -4,36 +4,36 @@ import fs from 'node:fs'
 import { withPermanentLanes } from '../src/teamLanes.js'
 
 test('work surfaces keep local state out of the interface', () => {
-  const myWork = fs.readFileSync(new URL('../src/views/MyWork.jsx', import.meta.url), 'utf8')
+  const home = fs.readFileSync(new URL('../src/views/Team.jsx', import.meta.url), 'utf8')
   const detail = fs.readFileSync(new URL('../src/views/WorkDetail.jsx', import.meta.url), 'utf8')
   const profile = fs.readFileSync(new URL('../src/components/ProfileSettings.jsx', import.meta.url), 'utf8')
-  assert.doesNotMatch(myWork, /title="Today"|title="Next"|title="Waiting"|title="Done today"/)
+  assert.doesNotMatch(home, /title="Today"|title="Next"|title="Waiting"|title="Done today"/)
   assert.doesNotMatch(detail, /Local state|Local priority|detail-state/)
   assert.doesNotMatch(profile, /Separate by status|Today, Next, Waiting, and Done Today/)
 })
 
 test('work capture and read-only external import are reachable', () => {
   const apiSource = fs.readFileSync(new URL('../src/api.js', import.meta.url), 'utf8')
-  const myWork = fs.readFileSync(new URL('../src/views/MyWork.jsx', import.meta.url), 'utf8')
+  const addWork = fs.readFileSync(new URL('../src/components/AddWorkDialog.jsx', import.meta.url), 'utf8')
   const detail = fs.readFileSync(new URL('../src/views/WorkDetail.jsx', import.meta.url), 'utf8')
   const verifier = fs.readFileSync(new URL('../../scripts/verify-ui.py', import.meta.url), 'utf8')
   for (const token of ['workItemId', 'work_item_id']) assert.match(apiSource, new RegExp(token))
   for (const token of ['Capture to this work', 'api.capture', 'detail.id']) assert.match(detail, new RegExp(token.replace('.', '\\.')))
-  for (const token of ['Import link', 'GitLab MR or ClickUp task URL', 'api.importWorkUrl', 'sourceBoard']) assert.match(myWork, new RegExp(token.replace('.', '\\.')))
+  for (const token of ['Import link', 'GitLab MR or ClickUp task URL', 'api.importWorkUrl', 'api.createWork']) assert.match(addWork, new RegExp(token.replace('.', '\\.')))
   for (const token of ['Capture to this work', 'Import link']) assert.match(verifier, new RegExp(token))
 })
 
 test('work lists keep native drag ordering affordances', () => {
   const source = fs.readFileSync(new URL('../src/components/WorkList.jsx', import.meta.url), 'utf8')
   const card = fs.readFileSync(new URL('../src/components/WorkCard.jsx', import.meta.url), 'utf8')
-  const board = fs.readFileSync(new URL('../src/views/MyWork.jsx', import.meta.url), 'utf8')
+  const board = fs.readFileSync(new URL('../src/components/PersonLane.jsx', import.meta.url), 'utf8')
   for (const token of ['onDragOver', 'onDrop', 'is-drop-target-before']) assert.match(source, new RegExp(token))
   for (const token of ['draggable', 'onDragStart']) assert.match(source + card, new RegExp(token))
   for (const token of ['api.moveWork', 'moveBoardCard']) assert.match(board, new RegExp(token.replace('.', '\\.')))
 })
 
-test('My Work reloads its calendar through the shared cache refresh', () => {
-  const source = fs.readFileSync(new URL('../src/views/MyWork.jsx', import.meta.url), 'utf8')
+test('Home reloads its calendar through the shared cache refresh', () => {
+  const source = fs.readFileSync(new URL('../src/views/Team.jsx', import.meta.url), 'utf8')
   assert.match(source, /api\.today/)
   assert.match(source, /loadCalendar/)
   assert.match(source, /useCacheRefresh/)
@@ -149,7 +149,7 @@ test('Log exposes work context without offering deletion for work rows', () => {
 
 test('Command bar routes work locally, includes approved actions, and guards stale search', () => {
   const command = fs.readFileSync(new URL('../src/components/CommandBar.jsx', import.meta.url), 'utf8')
-  for (const token of ['My Work', 'Team', 'Add Work', 'Capture', 'Ask Watson', 'Settings', 'Sync now', 'work_item', 'work_activity', 'AbortController', 'searchGenerationRef', "navigateTo(item.url)", "'noopener,noreferrer'"]) {
+  for (const token of ['Home', 'Add Work', 'Capture', 'Ask Watson', 'Settings', 'Sync now', 'work_item', 'work_activity', 'AbortController', 'searchGenerationRef', "navigateTo(item.url)", "'noopener,noreferrer'"]) {
     assert.match(command, new RegExp(token.replace('.', '\\.').replace('(', '\\(').replace(')', '\\)')))
   }
 })

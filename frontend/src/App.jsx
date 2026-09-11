@@ -55,6 +55,17 @@ export default function App() {
     catch { setManualSyncError('Could not confirm sync completion. Check connection status in Settings.') }
     finally { setManualSyncing(false) }
   }, [])
+  const syncing = Boolean(syncStatus?.running || manualSyncing)
+  const syncMessage = syncError || manualSyncError
+    ? { primary: 'Sync status unavailable', secondary: syncError || manualSyncError }
+    : syncing
+      ? { primary: 'Syncing connected services…', secondary: 'Your cached work stays available.' }
+      : syncStatus?.last_sync_at
+        ? {
+            primary: `Last refreshed ${new Date(syncStatus.last_sync_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+            secondary: [syncStatus.last_sync_duration_seconds != null ? `${Math.round(syncStatus.last_sync_duration_seconds)}s` : '', syncStatus.last_sync_error_count ? 'Some updates failed — check Settings → Sync' : ''].filter(Boolean).join(' · '),
+          }
+        : { primary: 'Waiting for the first sync', secondary: 'Connected services refresh every 10 min.' }
   const addWork = () => {
     setView('my-work')
     window.setTimeout(() => window.dispatchEvent(new Event('watson:add-work')), 0)
@@ -79,6 +90,10 @@ export default function App() {
         <span className="brand-text">Watson</span>
       </button>
       {VIEWS.map((view) => <button key={view.key} className={`nav-btn ${route.view === view.key ? 'active' : ''}`} onClick={() => navigate(view.path)}>{view.label}</button>)}
+      <div className="sync-status-strip" role="status" aria-live="polite">
+        <span className="sync-status-lines"><span>{syncMessage.primary}</span>{syncMessage.secondary && <small>{syncMessage.secondary}</small>}</span>
+        <span className={`sync-status-dot${syncing ? ' syncing' : ''}`} aria-hidden="true" />
+      </div>
       <div className="nav-actions">
         <button type="button" className="nav-add-work" onClick={addWork}>
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12" /></svg>
@@ -105,10 +120,6 @@ export default function App() {
         </div>
       </div>
     </nav>
-    <div className="sync-status-strip" role="status" aria-live="polite">
-      <span className={`sync-status-dot${syncStatus?.running || manualSyncing ? ' syncing' : ''}`} aria-hidden="true" />
-      <span>{syncError || manualSyncError || (syncStatus?.running || manualSyncing ? 'Syncing connected services… Your cached work stays available.' : syncStatus?.last_sync_at ? `Last refreshed ${new Date(syncStatus.last_sync_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${syncStatus.last_sync_duration_seconds != null ? ` · ${Math.round(syncStatus.last_sync_duration_seconds)}s` : ''}${syncStatus.last_sync_error_count ? ' · Some updates failed — check Settings → Sync' : ''}` : 'Waiting for the first sync')}</span>
-    </div>
     {onboardingError && <div className="app-bootstrap-error" role="alert"><span>{onboardingError}</span><button type="button" onClick={loadOnboarding} disabled={onboardingLoading}>{onboardingLoading ? 'Retrying…' : 'Retry'}</button></div>}
     <main className="main">{renderView()}</main>
     <CommandBar setView={setView} syncAll={syncAll} setLogQuery={setLogQuery}

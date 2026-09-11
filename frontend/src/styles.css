@@ -917,6 +917,7 @@ p, label { overflow-wrap: anywhere; }
 .sync-menu-title { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .sync-menu-title small { white-space: nowrap; }
 .route-placeholder { padding: 40px 0; color: var(--text-dim); }.route-placeholder h1 { color: var(--text); }
+@media (max-width: 900px) { .sync-status-strip { display: none; } }
 @media (max-width: 760px) { .app { padding: 0 12px 80px; }.nav { gap: 2px; margin-bottom: 24px; padding: 7px; }.brand { margin-right: 5px; }.brand-text { display: none; }.nav-btn { padding: 7px 9px; font-size: .86rem; }.nav-actions { gap: 2px; border-color: transparent; background: transparent; }.nav-add-work { padding: 0 9px; font-size: .75rem; }.nav-search { width: 34px; padding: 0; }.nav-search span, .nav-search kbd { display: none; }.nav-overflow-menu { right: 0; } }
 @media (max-width: 540px) { .nav-add-work span { display: none; }.nav-add-work { width: 34px; padding: 0; }.nav-btn { padding-inline: 7px; } }
 
@@ -1939,17 +1940,22 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--violet); outlin
   .nav-actions { gap: 0; }
 }
 
+/* Sync status rides in the nav beside Add Work, stacked on two lines. */
 .sync-status-strip {
   display: flex;
   align-items: center;
   gap: 8px;
-  max-width: 1392px;
-  margin: 12px auto 0;
-  padding: 0 12px;
+  margin-left: auto;
+  padding-right: 12px;
   color: var(--text-muted, #64748b);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: right;
 }
+.sync-status-strip + .nav-actions { margin-left: 0; }
+.sync-status-lines { display: grid; min-width: 0; }
+.sync-status-lines span, .sync-status-lines small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sync-status-lines small { color: var(--text-faint); font-size: 10px; }
 .sync-status-dot { width: 6px; height: 6px; flex-shrink: 0; border-radius: 50%; background: #08916f; }
 .sync-status-dot.syncing { background: #6554e8; animation: sync-pulse 1.5s ease-in-out infinite; }
 @keyframes sync-pulse { 50% { opacity: .35; } }
@@ -1967,7 +1973,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--violet); outlin
 /* ── notes column ────────────────────────────────────────────
    A togglable scratch panel that shares the board grid. Closed, it claims
    no column at all and the board keeps its full width. */
-.board-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; min-width: 0; }
+.board-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; min-width: 0; transition: grid-template-columns 200ms ease; }
 .board-split.with-notes { grid-template-columns: minmax(0, 7fr) minmax(270px, 3fr); }
 .board-split-main { min-width: 0; display: flex; flex-direction: column; gap: 18px; }
 .notes-toggle { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--border); border-radius: 999px; padding: 7px 12px; background: var(--surface-muted); color: var(--text-dim); font: inherit; font-size: .82rem; cursor: pointer; white-space: nowrap; }
@@ -1975,7 +1981,10 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--violet); outlin
 .notes-toggle.active { color: var(--text); border-color: rgba(79, 70, 229, 0.52); background: rgba(79, 70, 229, 0.1); }
 .notes-toggle svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .my-work-header-actions { display: flex; align-items: center; gap: 12px; }
-.notes-panel { position: sticky; top: 16px; min-width: 0; display: grid; gap: 12px; max-height: calc(100vh - 120px); overflow-y: auto; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-sm); }
+.notes-panel { position: sticky; top: 16px; min-width: 0; display: grid; gap: 12px; max-height: calc(100vh - 120px); overflow-y: auto; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-sm); animation: notes-panel-in 200ms ease-out; }
+.notes-panel.is-closing { animation: notes-panel-out 200ms ease-in forwards; }
+@keyframes notes-panel-in { from { opacity: 0; transform: translateX(14px); } }
+@keyframes notes-panel-out { to { opacity: 0; transform: translateX(14px); } }
 .notes-panel header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .notes-panel h2 { margin: 0; font-size: 1rem; letter-spacing: -.02em; }
 .notes-panel header button { border: 0; background: transparent; color: var(--text-faint); font: inherit; font-size: 1.15rem; line-height: 1; cursor: pointer; }

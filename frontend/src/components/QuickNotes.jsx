@@ -10,7 +10,7 @@ export function NotesToggle({ open, onToggle }) {
 
 // Scratch notes beside the work boards. Notes are stored locally by Watson and
 // never enter the capture pipeline, so nothing here is classified or synced.
-export default function QuickNotes({ onClose }) {
+export default function QuickNotes({ onClose, closing = false }) {
   const [notes, setNotes] = useState([])
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
@@ -52,7 +52,7 @@ export default function QuickNotes({ onClose }) {
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) add(event)
   }
 
-  return <aside className="notes-panel" aria-label="Quick notes">
+  return <aside className={`notes-panel${closing ? ' is-closing' : ''}`} aria-label="Quick notes">
     <header><h2>Quick notes</h2><button type="button" onClick={onClose} aria-label="Hide quick notes">×</button></header>
     <form onSubmit={add}>
       <label className="sr-only" htmlFor="quick-note-draft">New note</label>

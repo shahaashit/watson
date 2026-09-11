@@ -5,7 +5,7 @@ import Markdown from '../components/Markdown.jsx'
 import ScheduleStrip from '../components/ScheduleStrip.jsx'
 import PersonalTaskList from '../components/PersonalTaskList.jsx'
 import QuickNotes, { NotesToggle } from '../components/QuickNotes.jsx'
-import { readNotesOpen, writeNotesOpen } from '../notesPanel.js'
+import { useNotesPanel } from '../notesPanel.js'
 import { moveBoardCard } from '../boardOrder.js'
 import { syncMonitor, useCacheRefresh } from '../useSyncRefresh.js'
 
@@ -69,7 +69,7 @@ export default function MyWork() {
   const [addBusy, setAddBusy] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
   const [mutationError, setMutationError] = useState('')
-  const [notesOpen, setNotesOpen] = useState(() => readNotesOpen())
+  const notes = useNotesPanel()
 
   const loadWork = useCallback((signal) => api.myWork({ signal }).then((data) => {
     if (signal.aborted) return
@@ -131,20 +131,16 @@ export default function MyWork() {
   const refreshAfterCapture = () => {
     syncMonitor.refresh()
   }
-  const toggleNotes = () => setNotesOpen((open) => {
-    writeNotesOpen(!open)
-    return !open
-  })
 
   return <div className="my-work-page">
     <header className="my-work-header">
       <div><p className="eyebrow">My Work</p><h1>My day</h1><p className="my-day-date">{new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</p></div>
       <div className="my-work-header-actions">
         {!workLoading && !workError && <span className="my-day-count">{work.items.length} active {work.items.length === 1 ? 'task' : 'tasks'}</span>}
-        <NotesToggle open={notesOpen} onToggle={toggleNotes} />
+        <NotesToggle open={notes.open} onToggle={notes.toggle} />
       </div>
     </header>
-    <div className={`board-split${notesOpen ? ' with-notes' : ''}`}>
+    <div className={`board-split${notes.mounted ? ' with-notes' : ''}`}>
     <div className="board-split-main">
     <ScheduleStrip personal meetings={meetings} loading={scheduleLoading} error={scheduleError} />
     <section className="personal-tasks" aria-labelledby="my-tasks-title">
@@ -160,7 +156,7 @@ export default function MyWork() {
     </section>
     <CompactCapture onCaptured={refreshAfterCapture} />
     </div>
-    {notesOpen && <QuickNotes onClose={toggleNotes} />}
+    {notes.mounted && <QuickNotes closing={!notes.open} onClose={notes.toggle} />}
     </div>
   </div>
 }

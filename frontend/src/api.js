@@ -55,7 +55,6 @@ export const api = {
   search: (q, options = {}) => get('/api/search?q=' + encodeURIComponent(q || ''), options),
 
   // Local work board. These routes never write to ClickUp or GitLab.
-  myWork: (options = {}) => get('/api/work-items/my', options),
   teamWork: ({ meMode = false, ...options } = {}) => get(
     '/api/work-items/team' + (meMode ? '?me_mode=true' : ''),
     options,
@@ -70,6 +69,12 @@ export const api = {
   workInbox: (options = {}) => get('/api/work-inbox', options),
   resolveInbox: (id, workItemId) => post(`/api/work-inbox/${id}/resolve`, { work_item_id: workItemId }),
   dismissInbox: (id) => post(`/api/work-inbox/${id}/dismiss`),
+
+  // Scratch notes shown beside the boards. Local only; never classified.
+  notes: (options = {}) => get('/api/notes', options),
+  createNote: (body) => post('/api/notes', { body }),
+  updateNote: (id, body) => patch(`/api/notes/${id}`, { body }),
+  deleteNote: (id) => del(`/api/notes/${id}`),
 
   // Secrets supplied here are sent directly to the local API and are never
   // persisted by this client; settings responses only expose their presence.

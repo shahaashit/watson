@@ -61,7 +61,6 @@ export default function WorkDetail({ workItemId }) {
   const [activityBody, setActivityBody] = useState('')
   const [activityBusy, setActivityBusy] = useState(false)
   const [activityError, setActivityError] = useState('')
-  const sourceBoard = window.history.state?.sourceBoard === 'team' ? 'team' : 'my-work'
 
   const loadDetail = useCallback(async (signal) => {
     try {
@@ -94,12 +93,12 @@ export default function WorkDetail({ workItemId }) {
     finally { setActivityBusy(false) }
   }
   if (loading) return <p className="work-loading">Loading work context…</p>
-  if (error && !detail) return <div className="work-detail-load-error" role="alert"><p>{error}</p><button type="button" onClick={() => { setLoading(true); loadDetail() }}>Try again</button><button type="button" onClick={() => navigate(`/${sourceBoard}`)}>Back to board</button></div>
+  if (error && !detail) return <div className="work-detail-load-error" role="alert"><p>{error}</p><button type="button" onClick={() => { setLoading(true); loadDetail() }}>Try again</button><button type="button" onClick={() => navigate('/')}>Back to board</button></div>
   if (!detail) return null
   const owner = ownerLabel(detail, people)
 
   return <div className="work-detail-page">
-    <button type="button" className="back-to-board" onClick={() => navigate(`/${sourceBoard}`)}>← Back to {sourceBoard === 'team' ? 'Team' : 'My Work'}</button>
+    <button type="button" className="back-to-board" onClick={() => navigate('/')}>← Back to Home</button>
     {error && <p className="work-inline-error" role="alert">{error}</p>}
     <header className="work-detail-header"><div><p className="eyebrow">Work details</p><h1>{detail.title}</h1>{detail.description && <p className="work-detail-description">{detail.description}</p>}</div></header>
     <dl className="work-metadata"><div><dt>Owner</dt><dd>{owner}</dd></div><div><dt>Created</dt><dd>{readableTime(detail.created_at)}</dd></div><div><dt>Updated</dt><dd>{readableTime(detail.updated_at)}</dd></div>{detail.completed_at && <div><dt>Completed</dt><dd>{readableTime(detail.completed_at)}</dd></div>}</dl>

@@ -1221,8 +1221,10 @@ def test_deleting_a_linked_person_demotes_them_and_preserves_cards(client, conn)
     assert removed.json()["demoted"] is True
     retained = conn.execute("SELECT is_tracked FROM people WHERE id=?", (person["id"],)).fetchone()
     assert retained is not None and retained["is_tracked"] == 0
-    others = client.get("/api/work-items/team").json()["lanes"][0]
-    assert others["name"] == "Others"
+    others = next(
+        lane for lane in client.get("/api/work-items/team").json()["lanes"]
+        if lane["name"] == "Others"
+    )
     assert [work["id"] for work in others["items"]] == [item["id"]]
     assert person["id"] not in {
         listed["id"]

@@ -3,6 +3,14 @@
 .team-header h1 { margin: 0; font-size: clamp(1.5rem, 2.5vw, 1.9rem); letter-spacing: -.045em; }
 .team-header p:last-child { max-width: 650px; margin: 7px 0 0; color: var(--text-dim); }
 .team-header-actions { display: flex; align-items: center; gap: 8px; }
+.person-lane-meta { display: flex; align-items: center; gap: 6px; }
+.person-lane-add { width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid rgba(79, 70, 229, 0.4); border-radius: 7px; padding: 0; background: rgba(79, 70, 229, 0.08); color: var(--violet); font: inherit; font-size: 1rem; line-height: 1; cursor: pointer; }
+.person-lane-add:hover { border-color: var(--violet); background: rgba(79, 70, 229, 0.16); }
+.person-lane-add:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }
+.person-lane.is-self { border-color: rgba(79, 70, 229, 0.45); box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.18), var(--shadow-sm); }
+.person-lane.is-self .person-lane-heading { background: rgba(79, 70, 229, 0.07); }
+.person-lane.is-self .person-avatar { border-color: rgba(79, 70, 229, 0.45); background: rgba(79, 70, 229, 0.16); color: var(--violet); }
+.person-lane.is-self .person-lane-identity h2 { color: var(--violet); }
 .team-retry, .team-me-mode, .team-error button { border: 1px solid var(--border); border-radius: 8px; background: var(--surface-muted); color: var(--text-dim); padding: 7px 10px; font: inherit; font-size: .82rem; cursor: pointer; white-space: nowrap; }
 .team-retry:hover, .team-me-mode:hover, .team-error button:hover { color: var(--text); border-color: var(--border-bright); }
 .team-me-mode { display: inline-flex; align-items: center; gap: 7px; border-radius: 999px; }
@@ -51,3 +59,9 @@
 @media (prefers-reduced-motion: reduce) {
   .person-lane-card .work-card { transition: none; }
 }
+
+/* The notes column takes 30% of the board, so lanes lose one track. */
+.board-split.with-notes .team-lanes { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 1240px) { .board-split.with-notes .team-lanes { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 900px) { .board-split.with-notes .team-lanes { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 680px) { .board-split.with-notes .team-lanes { grid-template-columns: minmax(0, 1fr); } }

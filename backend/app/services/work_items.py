@@ -730,9 +730,29 @@ def team_work(
     separate_by_status: bool = True,
     timezone_name: str = "UTC",
     me_mode: bool = False,
+    self_person_id: int | None = None,
 ) -> dict:
-    """Return permanent tracked lanes followed by the fixed Others/Unassigned."""
+    """Return your own lane, then tracked lanes, then the fixed Others/Unassigned."""
     lanes = []
+    self_person = None
+    if self_person_id is not None:
+        self_person = conn.execute(
+            "SELECT * FROM people WHERE id=?", (self_person_id,)
+        ).fetchone()
+    if self_person is not None:
+        lanes.append({
+            "name": self_person["display_name"],
+            "person": person_dict(self_person),
+            # Me mode narrows teammate lanes to work that touches you. Your own
+            # lane is already all yours, so it stays whole.
+            "items": _team_items(
+                conn,
+                "owner_person_id=?",
+                (self_person["id"],),
+                separate_by_status=separate_by_status,
+                timezone_name=timezone_name,
+            ),
+        })
     tracked_people = conn.execute(
         "SELECT * FROM people WHERE is_tracked=1 AND is_self=0 ORDER BY lane_position, id"
     ).fetchall()

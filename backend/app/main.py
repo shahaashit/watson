@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse
 
 from . import db
 from .config import settings
-from .routers import actions, ask, capture, clickup, entries, flock_webhook, gitlab, log as log_router, reminders, review_automation, search, settings as settings_router, sync, today, work_import, work_inbox, work_items
+from .routers import actions, ask, capture, clickup, entries, flock_webhook, gitlab, log as log_router, notes, reminders, review_automation, search, settings as settings_router, sync, today, work_import, work_inbox, work_items
 from .services import (
     clickup_client, digest, exporter, external_errors, gitlab_client,
     settings_service, sync_pipeline, work_backfill,
@@ -173,6 +173,7 @@ app.include_router(search.router)
 app.include_router(sync.router)
 app.include_router(log_router.router)
 app.include_router(flock_webhook.router)
+app.include_router(notes.router)
 app.include_router(work_items.router)
 app.include_router(work_import.router)
 app.include_router(work_inbox.router)
@@ -203,7 +204,7 @@ if _ASSETS.is_dir():
 
 _SPA_PATHS = {
     "",
-    "my-work",
+    "home",
     "team",
     "log",
     "settings",

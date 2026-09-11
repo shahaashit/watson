@@ -68,12 +68,14 @@ def my_work(conn=Depends(get_db)):
 
 @router.get("/team")
 def team_work(me_mode: bool = False, conn=Depends(get_db)):
+    self_person_id = work_items.ensure_self_person(conn, settings.watson_user_name)
     profile = settings_service.profile(conn)
     return work_items.team_work(
         conn,
         separate_by_status=profile["separate_work_by_status"],
         timezone_name=profile["timezone"],
         me_mode=me_mode,
+        self_person_id=self_person_id,
     )
 
 

@@ -37,7 +37,7 @@ export default function Onboarding({ initialState, onComplete }) {
     try {
       const state = await api.updateOnboarding({ completed: true, step: 4 })
       onComplete?.(state)
-      navigate('/my-work')
+      navigate('/')
     } catch { setError('Could not finish setup. Your settings are still saved; retry when ready.') }
     finally { setMoving(false) }
   }

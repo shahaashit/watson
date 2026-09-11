@@ -6,6 +6,14 @@ GitLab and Google Calendar context.
 
 ## Safety invariants
 
+- Follow [CONTRIBUTING.md](CONTRIBUTING.md) for every change, commit and push.
+  This public repository must stay company-neutral: no private hostnames,
+  employee/customer data, real task links, proprietary code or credentials,
+  including in examples, screenshots, commit messages and PR descriptions.
+- Stage explicit files and run the public-tree check and redacted Gitleaks
+  staged scan before committing; scan history before pushing. Stop on findings
+  or missing checkers. Never bypass safeguards or force-add private files.
+
 - Persist captured text before invoking an LLM so classification failures never
   lose input.
 - Store live data outside the repository, under `WATSON_DATA_DIR`.

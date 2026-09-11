@@ -1,0 +1,5 @@
+# Maintainer-approved false positive: a synthetic token-shaped sentinel in the
+# historical exception-redaction test, not a provider credential. This exact
+# fingerprint exempts only this finding; new commits and other locations are
+# still scanned. Approved 2026-09-11. Do not broaden without maintainer review.
+cb56d6d4aad4f265cbe6a9c4602086adf64ab401:backend/tests/test_integration_health.py:gitlab-pat:529

@@ -4,6 +4,10 @@ Watson is a single-user localhost web app for deciding what deserves attention
 and keeping its context together. It runs only on `127.0.0.1` and keeps its
 live SQLite database on your Mac.
 
+Contributing? Read [the public-repository safety rules](CONTRIBUTING.md) before
+opening a PR or pushing changes. Credentials and company-specific data must
+remain outside the public repository.
+
 The app has three primary views:
 
 - **My Work** — your active tasks with direct ClickUp links, all of today's

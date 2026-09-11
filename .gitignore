@@ -1,4 +1,6 @@
 .env
+.env.*
+!.env.example
 .npmrc
 .watson-install.env
 .watson-setup.json
@@ -13,6 +15,18 @@ dist/
 .superpowers/
 docs/superpowers/
 *.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.log
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+token.json
+tokens.json
 .DS_Store
 # IDE + local Claude settings
 .idea/

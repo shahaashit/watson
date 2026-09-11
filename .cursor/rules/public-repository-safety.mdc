@@ -1,0 +1,18 @@
+---
+description: Keep Watson public, credential-free and company-neutral in every change
+alwaysApply: true
+---
+
+# Public repository safety
+
+- Read and follow `AGENTS.md` and `CONTRIBUTING.md` before editing or publishing.
+- Never commit secrets, setup bundles, environment files, local databases/logs,
+  internal URLs, employee/customer data, private project details or proprietary code.
+- This applies to tests, examples, images, commit messages and PR descriptions too.
+- Use synthetic examples (`alex@example.com`, `gitlab.example.com`); read real
+  deployment values from local settings, not hardcoded defaults.
+- Stage explicit paths; inspect staged content and run the public-tree check
+  and redacted staged Gitleaks scan before committing, plus history scan before push.
+- Do not bypass findings, force-add private files, or print credentials in output.
+- If sensitivity is uncertain, stop and ask. If exposed, notify the maintainer
+  privately and rotate credentials; do not rewrite shared history without approval.

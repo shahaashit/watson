@@ -8,7 +8,7 @@ from collections import OrderedDict
 from contextlib import contextmanager
 
 from ..models import now_iso
-from . import clickup_client, gitlab_client, work_items
+from . import clickup_client, gitlab_client, work_items, work_suppression
 
 
 @contextmanager
@@ -128,7 +128,12 @@ def _update_generated_title(conn, item, title: str) -> bool:
 def _ingest_groups(conn, groups) -> dict[str, int]:
     created = updated = 0
     for key, rows in groups.items():
+        rows = [row for row in rows if not work_suppression.mr_removed(conn, row['mr_id'])]
+        if not rows or (key[0] == 'clickup' and work_suppression.source_removed(conn, 'clickup', key[1])):
+            continue
         item = _group_item(conn, key, rows)
+        if item is not None and work_suppression.removed_at(conn, item['id']):
+            continue
         group_created = item is None
         cached_clickup = None
         if key[0] == "clickup":
@@ -196,7 +201,7 @@ def ingest_cached_mrs(conn) -> dict[str, int]:
     rows = conn.execute(
         "SELECT * FROM gitlab_mrs_cache WHERE state='opened' ORDER BY mr_id"
     ).fetchall()
-    groups = _mr_groups(rows)
+    groups = _mr_groups([row for row in rows if not work_suppression.mr_removed(conn, row['mr_id'])])
     relevant_groups = OrderedDict(
         (key, group_rows)
         for key, group_rows in groups.items()
@@ -217,8 +222,10 @@ def retire_terminal_mr_work(conn) -> int:
             "ORDER BY wi.id"
         ).fetchall()
         for item in items:
+            if work_suppression.removed_at(conn, item['id']):
+                continue
             linked_states = conn.execute(
-                "SELECT gm.state FROM work_links wl "
+                "SELECT gm.state FROM active_work_links wl "
                 "LEFT JOIN gitlab_mrs_cache gm ON gm.mr_id=wl.external_id "
                 "WHERE wl.work_item_id=? AND wl.source_type='gitlab_mr' "
                 "ORDER BY wl.id",
@@ -240,6 +247,8 @@ def retire_unselected_gitlab_work(conn) -> int:
 
     Manual imports are explicit exceptions. Cards with a ClickUp link also
     remain useful independently of the GitLab repository selection.
+    Intentionally removed links are not retirement evidence; cards with no
+    active MR links retain their lifecycle so those links can be restored.
     """
     selected = gitlab_client.selected_project_ids(conn)
     if selected is None:
@@ -248,18 +257,20 @@ def retire_unselected_gitlab_work(conn) -> int:
         retired = 0
         items = conn.execute(
             "SELECT DISTINCT wi.id FROM work_items wi "
-            "JOIN work_links mr ON mr.work_item_id=wi.id "
+            "JOIN active_work_links mr ON mr.work_item_id=wi.id "
             " AND mr.source_type='gitlab_mr' "
             "WHERE wi.origin='discovery' "
-            "AND NOT EXISTS (SELECT 1 FROM work_links cu "
+            "AND NOT EXISTS (SELECT 1 FROM active_work_links cu "
             " WHERE cu.work_item_id=wi.id AND cu.source_type='clickup') "
             "ORDER BY wi.id"
         ).fetchall()
         for item in items:
+            if work_suppression.removed_at(conn, item['id']):
+                continue
             mr_ids = [
                 row["external_id"]
                 for row in conn.execute(
-                    "SELECT external_id FROM work_links "
+                    "SELECT external_id FROM active_work_links "
                     "WHERE work_item_id=? AND source_type='gitlab_mr'",
                     (item["id"],),
                 )
@@ -281,16 +292,18 @@ def retire_missing_gitlab_work(conn) -> int:
 
     The refreshed cache is the authoritative set of actionable MRs. Manual
     imports and ClickUp-backed work remain explicit/local exceptions.
+    Only active links count: suppressed sources are deliberately absent from
+    refreshes, not evidence that their parent work should be retired.
     """
     with _atomic(conn):
         rows = conn.execute(
             "SELECT DISTINCT wi.id FROM work_items wi "
-            "JOIN work_links mr ON mr.work_item_id=wi.id "
+            "JOIN active_work_links mr ON mr.work_item_id=wi.id "
             " AND mr.source_type='gitlab_mr' "
             "WHERE wi.origin='discovery' "
-            "AND NOT EXISTS (SELECT 1 FROM work_links cu "
+            "AND NOT EXISTS (SELECT 1 FROM active_work_links cu "
             " WHERE cu.work_item_id=wi.id AND cu.source_type='clickup') "
-            "AND NOT EXISTS (SELECT 1 FROM work_links current "
+            "AND NOT EXISTS (SELECT 1 FROM active_work_links current "
             " JOIN gitlab_mrs_cache gm ON gm.mr_id=current.external_id "
             " WHERE current.work_item_id=wi.id "
             " AND current.source_type='gitlab_mr') "
@@ -298,6 +311,8 @@ def retire_missing_gitlab_work(conn) -> int:
         ).fetchall()
         timestamp = now_iso()
         for row in rows:
+            if work_suppression.removed_at(conn, row['id']):
+                continue
             conn.execute(
                 "UPDATE work_items SET origin='ignored', updated_at=? WHERE id=?",
                 (timestamp, row["id"]),
@@ -322,6 +337,8 @@ def linked_clickup_ids(conn) -> list[str]:
     ).fetchall()
     ids = []
     for row in rows:
+        if work_suppression.removed_at(conn, row['id']):
+            continue
         if row["origin"] == "manual":
             relevant = True
         elif row["origin"] == "discovery":
@@ -345,6 +362,8 @@ def reconcile_clickup_titles(conn) -> int:
         ).fetchall()
         seen = set()
         for row in rows:
+            if work_suppression.removed_at(conn, row['id']):
+                continue
             if row["id"] in seen:
                 continue
             seen.add(row["id"])
@@ -382,6 +401,7 @@ def _upsert_clickup_task(conn, task: dict) -> None:
 
 
 def _import_clickup(conn, url: str, task_id: str) -> dict:
+    work_suppression.require_sources(conn, clickup_id=task_id)
     existing = _linked_item(conn, "clickup", task_id)
     task = clickup_client.get_task_resilient(task_id)
     if not isinstance(task, dict) or str(task.get("id") or "") != task_id:
@@ -427,6 +447,7 @@ def _import_gitlab(conn, url: str) -> dict:
             raise RuntimeError("GitLab merge request could not be cached")
         rows = [row]
     groups = _mr_groups(rows)
+    work_suppression.require_sources(conn, [row['mr_id'] for row in rows])
     existing_items = [
         _group_item(conn, key, group_rows)
         for key, group_rows in groups.items()

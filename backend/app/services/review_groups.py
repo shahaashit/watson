@@ -85,6 +85,11 @@ def upsert_group(
 
     timestamp = now_iso()
     with _atomic(conn):
+        from . import work_suppression
+        work_suppression.require_sources(conn, members, clickup_id=related_clickup_task_id)
+        existing = conn.execute('SELECT id FROM review_groups WHERE fingerprint=?', (fingerprint,)).fetchone()
+        if existing and work_suppression.group_removed(conn, _get_group(conn, existing['id'])):
+            raise ValueError('Review group contains removed work; restore it first.')
         conn.execute(
             "INSERT INTO review_groups "
             "(author_username, title, description, provenance, confidence, fingerprint, "
@@ -128,13 +133,18 @@ def open_groups(conn, author_username: str | None = None) -> list[dict]:
         sql += " WHERE author_username=?"
         params = (author_username,)
     sql += " ORDER BY id"
-    return [_group_dict(conn, row) for row in conn.execute(sql, params)]
+    from . import work_suppression
+    groups = [_group_dict(conn, row) for row in conn.execute(sql, params)]
+    return [group for group in groups if not work_suppression.group_removed(conn, group)]
 
 
 def claim_creation(conn, group_id: int, *, allow_failed: bool = False) -> bool:
     """Atomically claim one group before crossing the ClickUp write boundary."""
     timestamp = now_iso()
     with _atomic(conn):
+        from . import work_suppression
+        if work_suppression.group_removed(conn, _get_group(conn, group_id)):
+            return False
         if allow_failed:
             cursor = conn.execute(
                 "UPDATE review_groups SET creation_state='creating', updated_at=? "
@@ -321,6 +331,9 @@ def _draft_duplicate_cleanup(conn, canonical_task_id: str, duplicate_task_id: st
 
 def _reconcile_managed_review_tasks(conn, group: dict) -> dict:
     """Adopt one canonical Watson task and gate duplicate closure behind approval."""
+    from . import work_suppression
+    if work_suppression.group_removed(conn, group):
+        return group
     from . import work_items
 
     managed = _managed_review_tasks_for_mrs(conn, group["mr_ids"])
@@ -401,6 +414,8 @@ def _reconcile_group(conn, planned, *, provenance: str | None = None) -> dict:
     members = set(planned.mr_ids)
     if existing:
         members.update(existing["mr_ids"])
+    from . import work_suppression
+    work_suppression.require_sources(conn, members, item_id=existing['work_item_id'] if existing else None, clickup_id=planned.related_clickup_task_id)
     group = upsert_group(
         conn,
         fingerprint=existing["fingerprint"] if existing else planned.fingerprint,
@@ -454,9 +469,18 @@ def _ambiguous_fields(group):
 
 def reconcile_plan(conn, groups, ambiguous) -> dict[str, int]:
     """Atomically persist automatic groups and draft uncertain local decisions."""
+    from . import work_suppression
     counts = {"exact_grouped": 0, "ai_grouped": 0, "attached": 0, "ambiguous": 0}
     with _atomic(conn):
         for planned in groups:
+            existing = (_get_group(conn, planned.existing_group_id) if planned.existing_group_id else None)
+            if existing is None:
+                row = conn.execute('SELECT id FROM review_groups WHERE fingerprint=?', (planned.fingerprint,)).fetchone()
+                existing = _get_group(conn, row['id']) if row else None
+            if work_suppression.group_removed(conn, {
+                'mr_ids': planned.mr_ids, 'related_clickup_task_id': planned.related_clickup_task_id,
+            }) or (existing and work_suppression.group_removed(conn, existing)):
+                continue
             if planned.provenance == "exact":
                 grouping_subject = f"Grouped review MRs using exact signals: {planned.title}"
             elif planned.provenance == "ai":
@@ -489,6 +513,8 @@ def reconcile_plan(conn, groups, ambiguous) -> dict[str, int]:
 
         for suggestion in ambiguous:
             members, fingerprint = _ambiguous_fields(suggestion)
+            if any(work_suppression.mr_removed(conn, mr_id) for mr_id in members):
+                continue
             if is_separated(conn, fingerprint):
                 continue
             exists = conn.execute(

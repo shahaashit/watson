@@ -14,6 +14,7 @@ from ..schemas import (
     WorkItemMove,
     WorkItemPatch,
     WorkLinkCreate,
+    WorkImportIn,
 )
 from ..services import settings_service, work_items
 
@@ -79,9 +80,58 @@ def team_work(me_mode: bool = False, conn=Depends(get_db)):
     )
 
 
+@router.get('/removed')
+def removed_work(conn=Depends(get_db)):
+    return {'work_items': work_items.removed_work(conn)}
+
+
+def _set_removed(conn, item_id, removed, link_id=None):
+    _item_or_404(conn, item_id)
+    try:
+        return {'work_item': work_items.set_removed(conn, item_id, removed, link_id=link_id)}
+    except LookupError:
+        raise HTTPException(404, 'work link not found') from None
+    except ValueError as error:
+        _conflict(error)
+
+
+@router.post('/{work_item_id}/remove')
+def remove_work(work_item_id: int, conn=Depends(get_db)):
+    return _set_removed(conn, work_item_id, True)
+
+
+@router.post('/{work_item_id}/restore')
+def restore_work(work_item_id: int, conn=Depends(get_db)):
+    return _set_removed(conn, work_item_id, False)
+
+
+@router.post('/{work_item_id}/links/{link_id}/remove')
+def remove_link(work_item_id: int, link_id: int, conn=Depends(get_db)):
+    return _set_removed(conn, work_item_id, True, link_id)
+
+
+@router.post('/{work_item_id}/links/{link_id}/restore')
+def restore_link(work_item_id: int, link_id: int, conn=Depends(get_db)):
+    return _set_removed(conn, work_item_id, False, link_id)
+
+
 @router.get("/{work_item_id}")
 def get_work_item(work_item_id: int, conn=Depends(get_db)):
     return {"work_item": _item_or_404(conn, work_item_id)}
+
+
+@router.post('/{work_item_id}/gitlab-mrs')
+def attach_gitlab_mr(work_item_id: int, payload: WorkImportIn, conn=Depends(get_db)):
+    from ..services import work_mr_attachment
+    _item_or_404(conn, work_item_id)
+    try:
+        return {'work_item': work_mr_attachment.attach(conn, work_item_id, payload.url)}
+    except work_mr_attachment.InvalidMRURL as error:
+        raise HTTPException(422, str(error)) from None
+    except ValueError as error:
+        _conflict(error)
+    except RuntimeError as error:
+        raise HTTPException(502, str(error)) from None
 
 
 @router.patch("/{work_item_id}")

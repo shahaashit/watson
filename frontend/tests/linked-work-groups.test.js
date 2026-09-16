@@ -18,7 +18,7 @@ test('ClickUp links remain clickable when their cached URL is missing', async ()
       links: [{ source_type: 'clickup', external_id: '86d3example', url }],
     })
     assert.match(markup, /href="https:\/\/app.clickup.com\/t\/86d3example"/)
-    assert.match(markup, />https:\/\/app.clickup.com\/t\/86d3example</)
+    assert.match(markup, />ClickUp task<span/)
   }
 })
 
@@ -57,7 +57,7 @@ test('groups merge requests from multiple repositories into one GitLab section',
   )
 })
 
-test('linked ClickUp work displays its URL instead of an opaque task id', async () => {
+test('linked ClickUp work displays task kind instead of a raw URL', async () => {
   const url = 'https://app.clickup.com/t/86d3example'
   const markup = await renderJsx('src/components/LinkedWork.jsx', {
     links: [{
@@ -69,6 +69,43 @@ test('linked ClickUp work displays its URL instead of an opaque task id', async 
     }],
   })
 
-  assert.match(markup, new RegExp(`>${url}<`))
+  assert.match(markup, /href="https:\/\/app.clickup.com\/t\/86d3example"/)
+  assert.match(markup, />ClickUp task<span/)
   assert.doesNotMatch(markup, />ClickUp 86d3example</)
+})
+
+test('ClickUp aliases dedupe by canonical task ID, preserve distinct IDs and count visible links', async () => {
+  const links = [
+    { id: 1, source_type: 'clickup', url: 'https://app.clickup.com/t/sampleA?view=board', task_kind: 'original' },
+    { id: 2, source_type: 'clickup', url: 'https://app.clickup.com/t/sampleA/#comments' },
+    { id: 3, source_type: 'clickup', external_id: 'sampleA' },
+    { id: 4, source_type: 'clickup', url: 'https://app.clickup.com/t/sampleB', task_kind: 'review' },
+    { id: 5, source_type: 'clickup', url: 'https://app.clickup.com/t/sampleC', task_kind: 'unknown' },
+  ]
+  const html = await renderJsx('src/components/LinkedWork.jsx', { links })
+  assert.equal((html.match(/<a /g) || []).length, 3)
+  assert.match(html, /Linked work<\/h2><span>3<\/span>/)
+  assert.match(html, />Original task<span/)
+  assert.match(html, />Review task<span/)
+  assert.match(html, />ClickUp task<span/)
+})
+
+test('noncanonical ClickUp URLs are not accidentally merged', async () => {
+  const { groupLinkedWork } = await import('../src/linkedWorkGroups.js')
+  const links = [
+    { id: 1, source_type: 'clickup', url: 'https://example.com/t/sampleA' },
+    { id: 2, source_type: 'clickup', url: 'https://app.clickup.com/t/sampleA/other' },
+    { id: 3, source_type: 'clickup', url: 'https://app.clickup.com/t/sampleA' },
+    { id: 4, source_type: 'gitlab_mr', url: 'https://gitlab.example.com/app/-/merge_requests/1' },
+  ]
+  assert.deepEqual(groupLinkedWork(links).flatMap(group => group.links).map(link => link.id), [1, 2, 3, 4])
+})
+
+test('Add MR is available by the GitLab heading even with no links, but absent on removed work', async () => {
+  const active = await renderJsx('src/components/LinkedWork.jsx', { links: [], onAddMr: async () => true })
+  assert.match(active, />GitLab MRs<\/h3>/)
+  assert.match(active, /aria-expanded="false"[^>]*>\+ Add MR/)
+  assert.doesNotMatch(active, /type="url"/)
+  const removed = await renderJsx('src/components/LinkedWork.jsx', { onAddMr: async () => true, removed: true })
+  assert.doesNotMatch(removed, /Add MR|type="url"/)
 })

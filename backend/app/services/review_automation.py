@@ -104,11 +104,15 @@ def collect_candidates(conn) -> list[ReviewCandidate]:
 
 
 def _existing_exact_group(conn, fingerprint: str):
-    return conn.execute(
+    from . import work_suppression
+    row = conn.execute(
         "SELECT id, author_username, title, description FROM review_groups "
         "WHERE fingerprint=?",
         (fingerprint,),
     ).fetchone()
+    if row and work_suppression.group_removed(conn, review_groups._get_group(conn, row['id'])):
+        return None
+    return row
 
 
 def _clickup_title(conn, task_id: str) -> str:
@@ -326,6 +330,9 @@ def _migrate_legacy_proposals(conn) -> dict[str, int]:
         if payload.get("auto_proposed") is not True:
             continue
         members = _payload_mr_ids(payload)
+        from . import work_suppression
+        if any(work_suppression.mr_removed(conn, mr_id) for mr_id in members):
+            continue
         if not members:
             continue
         fingerprint = _legacy_fingerprint(payload, members)
@@ -343,6 +350,8 @@ def _migrate_legacy_proposals(conn) -> dict[str, int]:
             "SELECT id FROM review_groups WHERE fingerprint=?", (fingerprint,)
         ).fetchone()
         existing_members = review_groups._get_group(conn, existing["id"])["mr_ids"] if existing else []
+        if existing and work_suppression.group_removed(conn, review_groups._get_group(conn, existing['id'])):
+            continue
         group = review_groups.upsert_group(
             conn,
             fingerprint=fingerprint,

@@ -87,7 +87,7 @@ _MR_URL_RE = re.compile(
 )
 
 
-def fetch_mr_by_path(path_with_namespace: str, iid, config=None):
+def fetch_mr_by_path(path_with_namespace: str, iid, config=None, *, explicit_attachment=False):
     """Fetch a single MR + its project id by namespaced path + iid (read-only).
     Returns a cache-row dict, or None on any failure."""
     config = config or gitlab_config()
@@ -105,6 +105,10 @@ def fetch_mr_by_path(path_with_namespace: str, iid, config=None):
         r.raise_for_status()
         mr = r.json()
         row = _normalize_mr(mr, "reviewer")
+        if explicit_attachment:
+            # A pasted link is not evidence of a review assignment.
+            row['role'] = ''
+            row['roles'] = []
         if row["mr_id"] != f"{pid}!{iid}":
             raise ValueError("GitLab merge request identity is invalid")
         if row["project"] == str(pid):
@@ -121,6 +125,7 @@ def ensure_mrs_cached(conn, text: str) -> list:
     """Find any MR URLs in `text` that aren't in the cache yet, fetch them, and
     insert them. Returns the list of newly-cached mr_ids — best-effort, swallows
     individual failures so a classification never crashes on a flaky URL."""
+    from . import work_suppression
     found = _MR_URL_RE.findall(text or "")
     if not found:
         return []
@@ -129,6 +134,11 @@ def ensure_mrs_cached(conn, text: str) -> list:
         return []
     added = []
     for path, iid in found:
+        if any(work_suppression.mr_removed(conn, link['external_id']) for link in conn.execute(
+            "SELECT external_id FROM work_links WHERE source_type='gitlab_mr' AND url LIKE ?",
+            (f'%/{path}/-/merge_requests/{iid}',),
+        )):
+            continue
         # the URL might already be in the cache under its `<project_id>!<iid>` form,
         # but we don't know the project_id without a lookup — so first scan by URL.
         if conn.execute(
@@ -138,6 +148,8 @@ def ensure_mrs_cached(conn, text: str) -> list:
             continue
         row = fetch_mr_by_path(path, iid, config)
         if not row:
+            continue
+        if work_suppression.mr_removed(conn, row['mr_id']):
             continue
         cache_row = {
             **row,
@@ -818,7 +830,7 @@ def _active_discovered_mr_ids(conn, selected_ids: set[str] | None = None) -> set
     Closed MRs disappear from open-MR discovery. Their absence must not leave
     linked cards permanently unknown, nor resurrect unrelated historical work.
     """
-    from . import work_items
+    from . import work_items, work_suppression
 
     referenced = set()
     for item in conn.execute(
@@ -827,6 +839,8 @@ def _active_discovered_mr_ids(conn, selected_ids: set[str] | None = None) -> set
         "WHERE wi.origin='discovery' AND wi.state != 'done' "
         "AND wi.completed_at IS NULL"
     ).fetchall():
+        if work_suppression.removed_at(conn, item['id']):
+            continue
         if not (item['is_self'] or item['is_tracked'] or work_items._discovery_is_team_relevant(conn, item)):
             continue
         referenced.update(
@@ -836,10 +850,11 @@ def _active_discovered_mr_ids(conn, selected_ids: set[str] | None = None) -> set
                 (item['id'],),
             ) if _project_is_selected(row['external_id'], selected_ids)
         )
-    return referenced
+    return {mr_id for mr_id in referenced if not work_suppression.mr_removed(conn, mr_id)}
 
 
-def _referenced_mr_ids(conn, selected_ids: set[str] | None = None) -> set[str]:
+def _referenced_mr_ids(conn, selected_ids: set[str] | None = None, *, include_manual=True) -> set[str]:
+    from . import work_suppression
     referenced = set()
     for row in conn.execute(
         "SELECT related_mr_id, additional_mr_ids FROM managed_tasks"
@@ -867,9 +882,27 @@ def _referenced_mr_ids(conn, selected_ids: set[str] | None = None) -> set[str]:
             "WHERE wl.source_type='gitlab_mr' AND TRIM(wl.external_id) <> '' "
             "AND wi.origin='manual'"
         )
-        if row["origin"] == "manual"
+        if include_manual and row["origin"] == "manual"
     )
-    return referenced
+    return {mr_id for mr_id in referenced if not work_suppression.mr_removed(conn, mr_id)}
+
+
+def _explicit_attachment_mr_ids(conn) -> set[str]:
+    """A pasted attachment is durable tracking provenance, not review evidence."""
+    attached = set()
+    for row in conn.execute(
+        "SELECT wl.id, wl.external_id, a.metadata_json FROM work_links wl "
+        "JOIN work_activity a ON a.work_item_id=wl.work_item_id "
+        "WHERE wl.source_type='gitlab_mr' AND a.activity_type='system'"
+    ):
+        try:
+            metadata = json.loads(row['metadata_json'] or '{}')
+        except (TypeError, ValueError):
+            continue
+        if (isinstance(metadata, dict) and metadata.get('kind') == 'work_mr_attached'
+                and metadata.get('link_id') == row['id']):
+            attached.add(row['external_id'])
+    return attached
 
 
 def selected_project_ids(conn) -> set[str] | None:
@@ -922,11 +955,14 @@ def _self_roles_for_row(row: dict, username: str) -> list[str]:
 
 
 def sync(conn) -> int:
+    from . import work_suppression
     config = _require_config()
     username = current_username(config).strip()
     selected_ids = selected_project_ids(conn)
     merged_by_id = {}
     for row in fetch_open_mrs_for_people(conn, config, username):
+        if work_suppression.mr_removed(conn, row['mr_id']):
+            continue
         if not _project_is_selected(row["mr_id"], selected_ids):
             continue
         candidate = dict(row)
@@ -950,6 +986,8 @@ def sync(conn) -> int:
             {"updated_after": updated_after},
             config,
         ).items():
+            if work_suppression.mr_removed(conn, mr_id):
+                continue
             if not _project_is_selected(mr_id, selected_ids):
                 continue
             merged_by_id[mr_id] = _merge_mr(merged_by_id.get(mr_id), row)
@@ -972,15 +1010,19 @@ def sync(conn) -> int:
     # the user isn't formally author/reviewer (e.g. they're informally reviewing).
     # Re-fetch each so we get fresh state (state, title, etc.).
     referenced = _referenced_mr_ids(conn, selected_ids)
+    explicit_only = _explicit_attachment_mr_ids(conn) - _referenced_mr_ids(
+        conn, selected_ids, include_manual=False
+    )
     fetched_ids = set(merged_by_id)
     referenced_added = 0
     for mr_id in sorted((referenced | discovered_references) - fetched_ids):
-        row = _fetch_mr_dict(mr_id, "reviewer" if mr_id in referenced else "author", config)
+        legacy_review = mr_id in referenced and mr_id not in explicit_only
+        row = _fetch_mr_dict(mr_id, "reviewer" if legacy_review else "author", config)
         if not row:
             raise RuntimeError("GitLab linked merge request refresh failed")
         # Tracking a teammate's card is not evidence that the local user is
         # its reviewer. Preserve the legacy explicit-reference behavior only.
-        row["_self_roles"] = ["reviewer"] if mr_id in referenced else _self_roles_for_row(row, username)
+        row["_self_roles"] = ["reviewer"] if legacy_review else _self_roles_for_row(row, username)
         merged_by_id[mr_id] = _merge_mr(merged_by_id.get(mr_id), row)
         fetched_ids.add(mr_id)
         referenced_added += 1
@@ -991,7 +1033,7 @@ def sync(conn) -> int:
     after = (
         datetime.now() - timedelta(days=settings.engagement_lookback_days)
     ).date().isoformat()
-    engaged_ids = fetch_engaged_mr_ids(after, config)
+    engaged_ids = {mr_id for mr_id in fetch_engaged_mr_ids(after, config) if not work_suppression.mr_removed(conn, mr_id)}
     for mr_id in engaged_ids & fetched_ids:
         merged_by_id[mr_id] = _merge_mr(
             merged_by_id[mr_id],

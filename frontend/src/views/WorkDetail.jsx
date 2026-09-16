@@ -6,6 +6,9 @@ import LinkedWork from '../components/LinkedWork.jsx'
 import PendingAction from '../components/PendingAction.jsx'
 import WorkFollowups from '../components/WorkFollowups.jsx'
 import { useCacheRefresh } from '../useSyncRefresh.js'
+import useLocalWorkMutation from '../useLocalWorkMutation.js'
+import WorkRemovalControls from '../components/WorkRemovalControls.jsx'
+import LocalRemovalConfirm from '../components/LocalRemovalConfirm.jsx'
 
 const ACTIVITY_TYPES = [
   ['note', 'Note'],
@@ -61,6 +64,11 @@ export default function WorkDetail({ workItemId }) {
   const [activityBody, setActivityBody] = useState('')
   const [activityBusy, setActivityBusy] = useState(false)
   const [activityError, setActivityError] = useState('')
+  const [removal, setRemoval] = useState(null)
+  const localMutation = useLocalWorkMutation(workItemId, updated => {
+    setDetail(updated); setRemoval(null)
+  })
+  useEffect(() => { setRemoval(null) }, [workItemId])
 
   const loadDetail = useCallback(async (signal) => {
     try {
@@ -100,14 +108,25 @@ export default function WorkDetail({ workItemId }) {
   return <div className="work-detail-page">
     <button type="button" className="back-to-board" onClick={() => navigate('/')}>← Back to Home</button>
     {error && <p className="work-inline-error" role="alert">{error}</p>}
-    <header className="work-detail-header"><div><p className="eyebrow">Work details</p><h1>{detail.title}</h1>{detail.description && <p className="work-detail-description">{detail.description}</p>}</div></header>
+    <header className="work-detail-header"><div><p className="eyebrow">Work details</p><h1>{detail.title}</h1>{detail.description && <p className="work-detail-description">{detail.description}</p>}</div>
+      {!detail.removed_at && <WorkRemovalControls busy={localMutation.busy} onRequestRemove={() => setRemoval({ kind: 'work' })} />}
+    </header>
+    {detail.removed_at && <WorkRemovalControls removedAt={detail.removed_at} busy={localMutation.busy} onRestore={() => localMutation.run(() => api.restoreWork(detail.id), 'Could not restore this work. Please retry.')} />}
+    {localMutation.error && !removal && <p className="work-inline-error" role="alert">{localMutation.error}</p>}
+    {removal && <LocalRemovalConfirm title={`Remove “${detail.title}” from Watson?`}
+      actionLabel="Remove from Watson" busy={localMutation.busy} error={localMutation.error}
+      onCancel={() => setRemoval(null)} onConfirm={() => localMutation.run(
+        () => api.removeWork(detail.id),
+        'Could not remove this from Watson. Please retry.')} />}
     <dl className="work-metadata"><div><dt>Owner</dt><dd>{owner}</dd></div><div><dt>Created</dt><dd>{readableTime(detail.created_at)}</dd></div><div><dt>Updated</dt><dd>{readableTime(detail.updated_at)}</dd></div>{detail.completed_at && <div><dt>Completed</dt><dd>{readableTime(detail.completed_at)}</dd></div>}</dl>
     <div className="work-detail-grid"><div className="work-detail-main">
       <CaptureToWork workItemId={detail.id} onCaptured={() => loadDetail()} />
       <section className="activity-composer" aria-labelledby="add-activity-title"><div className="work-section-heading"><h2 id="add-activity-title">Add activity</h2></div><form onSubmit={submitActivity}><label className="sr-only" htmlFor="activity-body">Activity details</label><textarea id="activity-body" value={activityBody} onChange={(event) => setActivityBody(event.target.value)} placeholder="Note a decision, blocker, or update…" rows="3" disabled={activityBusy} /><div><label htmlFor="activity-type">Type</label><select id="activity-type" value={activityType} onChange={(event) => setActivityType(event.target.value)} disabled={activityBusy}>{ACTIVITY_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><button type="submit" disabled={activityBusy || !activityBody.trim()}>{activityBusy ? 'Saving…' : 'Add activity'}</button></div></form>{activityError && <p className="work-inline-error" role="alert">{activityError}</p>}</section>
       <ActivityThread activity={detail.activity} />
     </div><aside className="work-detail-support">
-      <LinkedWork links={detail.links} />
+      <LinkedWork key={detail.id} links={detail.links} removedLinks={detail.removed_links} busy={localMutation.busy} removed={Boolean(detail.removed_at)}
+        onAddMr={url => detail.removed_at ? Promise.resolve(false) : localMutation.run(() => api.addGitlabMr(detail.id, url), 'Could not add this MR. Check the URL and your GitLab connection, then try again.')}
+        onRestore={link => localMutation.run(() => api.restoreWorkLink(detail.id, link.id), 'Could not restore this MR link. Please retry.')} />
       <WorkFollowups reminders={detail.reminders} onChanged={() => loadDetail()} />
       <section className="involved-people" aria-labelledby="people-title"><div className="work-section-heading"><h2 id="people-title">Involved people</h2></div><p>{owner === 'Unassigned' ? 'No owner has been resolved yet.' : owner}</p></section>
       <section className="pending-work-actions" aria-labelledby="pending-actions-title"><div className="work-section-heading"><h2 id="pending-actions-title">Pending actions</h2><span>{detail.pending_actions?.length || 0}</span></div>{!detail.pending_actions?.length ? <p className="work-detail-empty">No external writes are awaiting approval.</p> : detail.pending_actions.map((action) => <PendingAction key={action.id} action={action} onChanged={() => loadDetail()} />)}</section>

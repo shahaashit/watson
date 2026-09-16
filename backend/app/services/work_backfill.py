@@ -3,7 +3,7 @@ import json
 from contextlib import contextmanager
 
 from ..config import settings
-from . import events, work_items
+from . import events, work_items, work_suppression
 
 
 @contextmanager
@@ -39,6 +39,18 @@ def backfill_managed_work(conn) -> dict[str, int]:
         rows = conn.execute("SELECT * FROM managed_tasks ORDER BY id").fetchall()
         groups = {}
         for row in rows:
+            mr_ids = [row['related_mr_id']]
+            try:
+                extra = json.loads(row['additional_mr_ids'] or '[]')
+                if isinstance(extra, list):
+                    mr_ids.extend(m for m in extra if isinstance(m, str))
+            except (ValueError, TypeError):
+                pass
+            if any(work_suppression.mr_removed(conn, m) for m in mr_ids if m) or any(
+                work_suppression.source_removed(conn, 'clickup', task_id)
+                for task_id in (row['clickup_task_id'], row['related_clickup_task_id']) if task_id
+            ):
+                continue
             key = row["related_clickup_task_id"] or row["clickup_task_id"]
             groups.setdefault(key, []).append(row)
 

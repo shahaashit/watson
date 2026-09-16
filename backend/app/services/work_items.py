@@ -8,6 +8,7 @@ import json
 from contextlib import contextmanager
 from datetime import datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from . import work_suppression
 
 from app.models import (
     action_dict,
@@ -262,6 +263,10 @@ def merge_items(conn, survivor_id: int, duplicate_ids: list[int]) -> dict:
 
     with _mutation(conn):
         item_ids = [survivor_id, *duplicate_ids]
+        for item_id in item_ids:
+            work_suppression.require_sources(conn, item_id=item_id)
+            if conn.execute('SELECT 1 FROM work_links wl JOIN work_link_removals r ON r.link_id=wl.id WHERE wl.work_item_id=? AND r.restored_at IS NULL', (item_id,)).fetchone():
+                raise ValueError('Work contains removed links; restore them before merging.')
         rows = [dict(_require_item(conn, item_id)) for item_id in item_ids]
         owner_keys = {
             ("person", row["owner_person_id"])
@@ -418,6 +423,11 @@ def add_work_link(
 ) -> dict:
     with _mutation(conn):
         _require_item(conn, work_item_id)
+        work_suppression.require_sources(conn, item_id=work_item_id)
+        if work_suppression.source_removed(conn, source_type, external_id):
+            raise ValueError('Source was removed from Watson; restore it first.')
+        if source_type == 'gitlab_mr':
+            work_suppression.require_sources(conn, [external_id])
         existing = conn.execute(
             "SELECT * FROM work_links WHERE source_type=? AND external_id=?",
             (source_type, external_id),
@@ -464,14 +474,34 @@ def add_activity(
         return work_activity_dict(conn.execute("SELECT * FROM work_activity WHERE id=?", (cursor.lastrowid,)).fetchone())
 
 
+def _clickup_task_kind(conn, task_id: str) -> str:
+    if conn.execute(
+        "SELECT 1 FROM managed_tasks WHERE clickup_task_id=? AND category='Review' "
+        "UNION ALL SELECT 1 FROM review_groups WHERE clickup_task_id=? LIMIT 1",
+        (task_id, task_id),
+    ).fetchone():
+        return 'review'
+    cached = conn.execute('SELECT name FROM clickup_tasks_cache WHERE task_id=?', (task_id,)).fetchone()
+    if cached is None:
+        return 'task'
+    return 'review' if (cached['name'] or '').strip().startswith('Review -') else 'original'
+
+
 def get_work_detail(conn, work_item_id: int) -> dict | None:
     item = _item_row(conn, work_item_id)
     if item is None:
         return None
     detail = work_item_dict(item)
+    detail['removed_at'] = work_suppression.removed_at(conn, work_item_id)
     detail["links"] = [work_link_dict(row) for row in conn.execute(
         "SELECT * FROM work_links WHERE work_item_id=? ORDER BY created_at, id", (work_item_id,)
     ).fetchall()]
+    removed_ids = {row['link_id'] for row in conn.execute('SELECT link_id FROM work_link_removals WHERE restored_at IS NULL')}
+    detail['removed_links'] = [link for link in detail['links'] if link['id'] in removed_ids]
+    detail['links'] = [link for link in detail['links'] if link['id'] not in removed_ids]
+    for link in detail['links']:
+        if link['source_type'] == 'clickup':
+            link['task_kind'] = _clickup_task_kind(conn, link['external_id'])
     detail["activity"] = [work_activity_dict(row) for row in conn.execute(
         "SELECT * FROM work_activity WHERE work_item_id=? ORDER BY created_at DESC, id DESC", (work_item_id,)
     ).fetchall()]
@@ -491,6 +521,40 @@ def get_work_detail(conn, work_item_id: int) -> dict | None:
         (work_item_id, work_item_id),
     ).fetchall()]
     return detail
+
+
+def set_removed(conn, item_id: int, removed: bool, *, link_id: int | None = None) -> dict:
+    """Retain source rows and lifecycle; atomically toggle local suppression."""
+    from . import events
+    with _mutation(conn):
+        _require_item(conn, item_id)
+        link = None
+        if link_id is not None:
+            link = conn.execute('SELECT * FROM work_links WHERE id=? AND work_item_id=?', (link_id, item_id)).fetchone()
+            if link is None:
+                raise LookupError('work link not found')
+            if link['source_type'] != 'gitlab_mr':
+                raise ValueError('Only merge request links can be removed individually.')
+        table, key, value = ('work_link_removals', 'link_id', link_id) if link else ('work_removals', 'work_item_id', item_id)
+        current = conn.execute(f'SELECT * FROM {table} WHERE {key}=?', (value,)).fetchone()
+        is_removed = current is not None and current['restored_at'] is None
+        if is_removed != removed:
+            if removed:
+                work_suppression.require_not_creating(conn, item_id, link)
+                conn.execute(f'INSERT INTO {table} ({key}, removed_at, restored_at) VALUES (?, ?, NULL) ON CONFLICT({key}) DO UPDATE SET removed_at=excluded.removed_at, restored_at=NULL', (value, now_iso()))
+            else:
+                conn.execute(f'UPDATE {table} SET restored_at=? WHERE {key}=?', (now_iso(), value))
+            kind = ('work_link_' if link else 'work_') + ('removed' if removed else 'restored')
+            body = ('Merge request link' if link else 'Work') + (' removed from Watson.' if removed else ' restored in Watson.')
+            add_activity(conn, item_id, activity_type='system', body=body, metadata={'kind': kind, 'link_id': link_id})
+            events.record(conn, kind, body, details={'work_item_id': item_id, 'link_id': link_id})
+    return get_work_detail(conn, item_id)
+
+
+def removed_work(conn) -> list[dict]:
+    return [dict(row) for row in conn.execute(
+        'SELECT wi.id, wi.title, r.removed_at FROM work_items wi JOIN work_removals r ON r.work_item_id=wi.id WHERE r.restored_at IS NULL ORDER BY r.removed_at DESC, wi.id DESC'
+    )]
 
 
 def _completed_today(value, timezone_name: str) -> bool:
@@ -520,6 +584,7 @@ def my_work(
     result = {state: [] for state in ("today", "next", "waiting", "done")}
     rows = conn.execute(
         "SELECT wi.* FROM work_items wi WHERE wi.owner_person_id=? "
+        "AND NOT EXISTS(SELECT 1 FROM work_removals r WHERE r.work_item_id=wi.id AND r.restored_at IS NULL) "
         "AND NOT EXISTS(SELECT 1 FROM review_groups rg WHERE rg.work_item_id=wi.id) "
         "AND NOT EXISTS(SELECT 1 FROM work_links wl JOIN managed_tasks mt "
         "ON mt.clickup_task_id=wl.external_id WHERE wl.work_item_id=wi.id "
@@ -625,7 +690,7 @@ def _discovery_is_team_relevant(conn, item) -> bool:
     if item["origin"] != "discovery":
         return True
     links = conn.execute(
-        "SELECT source_type, external_id FROM work_links WHERE work_item_id=?",
+        "SELECT source_type, external_id FROM active_work_links WHERE work_item_id=?",
         (item["id"],),
     ).fetchall()
     for link in links:
@@ -648,7 +713,7 @@ def _work_item_involves_self(conn, item) -> bool:
     if item["origin"] == "manual":
         return True
     links = conn.execute(
-        "SELECT source_type, external_id FROM work_links WHERE work_item_id=?",
+        "SELECT source_type, external_id FROM active_work_links WHERE work_item_id=?",
         (item["id"],),
     ).fetchall()
     self_clickup_values = None
@@ -678,7 +743,7 @@ def _gitlab_repositories(conn, work_item_id: int) -> list[str]:
     return [
         row["project"]
         for row in conn.execute(
-            "SELECT DISTINCT gm.project FROM work_links wl "
+            "SELECT DISTINCT gm.project FROM active_work_links wl "
             "JOIN gitlab_mrs_cache gm ON gm.mr_id=wl.external_id "
             "WHERE wl.work_item_id=? AND wl.source_type='gitlab_mr' "
             "AND gm.project IS NOT NULL AND trim(gm.project) <> '' "
@@ -700,6 +765,7 @@ def _team_items(
 ):
     rows = conn.execute(
         f"SELECT * FROM work_items WHERE origin <> 'ignored' AND ({where_sql}) "
+        "AND NOT EXISTS(SELECT 1 FROM work_removals r WHERE r.work_item_id=work_items.id AND r.restored_at IS NULL) "
         "ORDER BY priority_position, id",
         params,
     ).fetchall()

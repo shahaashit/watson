@@ -74,7 +74,7 @@ def clean_db():
     db.init_db()
     connection = db.connect()
     # order matters: child/referencing tables before the tables they reference
-    for table in ("review_group_mrs", "review_group_decisions", "review_groups",
+    for table in ("work_link_removals", "work_removals", "review_group_mrs", "review_group_decisions", "review_groups",
                   "work_activity", "work_inbox", "managed_tasks", "pending_actions",
                   "reminders", "entries", "captures", "work_links", "work_items",
                   "person_identities", "people", "clickup_tasks_cache", "gitlab_mrs_cache",

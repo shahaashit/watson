@@ -105,11 +105,14 @@ def _call_model(prompt: str):
 
 
 def _is_open_target(conn, group_id: int) -> bool:
+    from . import review_groups, work_suppression
     row = conn.execute(
         "SELECT work_item_id, clickup_task_id FROM review_groups WHERE id=?",
         (group_id,),
     ).fetchone()
     if row is None:
+        return False
+    if work_suppression.group_removed(conn, review_groups._get_group(conn, group_id)):
         return False
     if row["work_item_id"] is not None:
         item = conn.execute(
@@ -137,6 +140,9 @@ def group_by_context(
     """Call the model once and accept only a complete, trusted partition."""
     if not candidates:
         return SemanticPlan(groups=(), ambiguous=())
+    from . import work_suppression
+    if any(work_suppression.mr_removed(conn, candidate.mr_id) for candidate in candidates):
+        raise SemanticGroupingDeferred('work was removed before grouping')
     supplied = {candidate.mr_id: candidate for candidate in candidates}
     if len(supplied) != len(candidates):
         raise SemanticGroupingDeferred("duplicate supplied MR")

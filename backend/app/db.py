@@ -243,6 +243,21 @@ CREATE TABLE IF NOT EXISTS work_links (
   UNIQUE(source_type, external_id)
 );
 
+CREATE TABLE IF NOT EXISTS work_removals (
+  work_item_id INTEGER PRIMARY KEY REFERENCES work_items(id) ON DELETE CASCADE,
+  removed_at TEXT NOT NULL,
+  restored_at TEXT NULL
+);
+CREATE TABLE IF NOT EXISTS work_link_removals (
+  link_id INTEGER PRIMARY KEY REFERENCES work_links(id) ON DELETE CASCADE,
+  removed_at TEXT NOT NULL,
+  restored_at TEXT NULL
+);
+CREATE VIEW IF NOT EXISTS active_work_links AS
+  SELECT wl.* FROM work_links wl
+  WHERE NOT EXISTS (SELECT 1 FROM work_link_removals r WHERE r.link_id=wl.id AND r.restored_at IS NULL)
+    AND NOT EXISTS (SELECT 1 FROM work_removals r WHERE r.work_item_id=wl.work_item_id AND r.restored_at IS NULL);
+
 CREATE TABLE IF NOT EXISTS work_activity (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   work_item_id INTEGER NOT NULL REFERENCES work_items(id) ON DELETE CASCADE,

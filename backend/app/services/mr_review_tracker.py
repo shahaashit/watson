@@ -36,6 +36,9 @@ def _already_tracked(conn, mr_id: str) -> bool:
     it, OR any pending_action — pending, approved, rejected, or executed —
     already references it. That way a user's reject sticks: we never
     re-propose what they dismissed."""
+    from . import work_suppression
+    if work_suppression.mr_removed(conn, mr_id):
+        return True
     if conn.execute(
         "SELECT 1 FROM managed_tasks WHERE related_mr_id = ?", (mr_id,)
     ).fetchone():

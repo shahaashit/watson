@@ -136,6 +136,8 @@ def seed_scratch(data_dir: Path) -> dict[str, int]:
 
         seed_review_mr("101!10", title="Semantic rollout API", project="watson/backend")
         seed_review_mr("202!20", title="Semantic rollout UI", project="watson/frontend")
+        seed_review_mr("999!82", title="Additional linked MR", project="watson/extra")
+        app_settings.set_value(conn, 'integration.gitlab.base_url', 'https://gitlab.example')
         grouped_review = work_items.create_work_item(
             conn,
             title="Review - Semantic rollout (Alex Chen)",
@@ -451,6 +453,57 @@ def run_onboarding_checks(browser) -> None:
         page.close()
 
 
+def run_removal_checks(browser) -> None:
+    """Exercise only reversible local operations on a newly created scratch card."""
+    page = browser.new_page(viewport={"width": 390, "height": 900})
+    title = 'Scratch reversible removal'
+    created = page.request.post(f'{BASE_URL}/api/work-items', data={'title': title})
+    assert created.status == 201
+    item_id = created.json()['work_item']['id']
+    linked = page.request.post(f'{BASE_URL}/api/work-items/{item_id}/links', data={
+        'source_type': 'gitlab_mr', 'external_id': '999!81',
+        'url': 'https://gitlab.example.com/demo/sample/-/merge_requests/81',
+        'label': 'Synthetic removal MR',
+    })
+    assert linked.status in (200, 201)
+    try:
+        page.goto(f'{BASE_URL}/work/{item_id}', wait_until='networkidle')
+        page.get_by_label('Work actions', exact=True).click()
+        page.get_by_role('button', name='Remove from Watson', exact=True).click()
+        dialog = page.get_by_role('dialog')
+        dialog.get_by_role('button', name='Cancel', exact=True).click()
+        assert page.get_by_role('button', name='Undo / Restore', exact=True).count() == 0
+        page.get_by_label('Work actions', exact=True).click()
+        page.get_by_role('button', name='Remove from Watson', exact=True).click()
+        page.get_by_role('dialog').get_by_role('button', name='Remove from Watson', exact=True).click()
+        page.get_by_role('button', name='Undo / Restore', exact=True).wait_for()
+        page.goto(f'{BASE_URL}/home', wait_until='networkidle')
+        assert page.get_by_role('button', name=f'Open {title}', exact=True).count() == 0
+        page.goto(f'{BASE_URL}/settings/data', wait_until='networkidle')
+        page.get_by_role('button', name=f'Restore {title}', exact=True).click()
+        page.get_by_role('button', name=f'Restore {title}', exact=True).wait_for(state='detached')
+        page.goto(f'{BASE_URL}/work/{item_id}', wait_until='networkidle')
+        assert page.get_by_role('button', name='Unlink', exact=False).count() == 0
+        # Old unlink records remain recoverable, but no longer clutter each MR.
+        response = page.request.post(f'{BASE_URL}/api/work-items/{item_id}/links/{linked.json()["link"]["id"]}/remove')
+        assert response.ok
+        page.reload(wait_until='networkidle')
+        page.get_by_role('button', name='Restore Synthetic removal MR (999!81)', exact=True).wait_for()
+        assert page.locator('.linked-work-list a').count() == 0
+        page.get_by_role('button', name='Restore Synthetic removal MR (999!81)', exact=True).click()
+        page.get_by_role('button', name='Restore Synthetic removal MR (999!81)', exact=True).wait_for(state='detached')
+        assert page.locator('.linked-work-list a').count() == 1
+        page.get_by_role('button', name='Add MR', exact=False).click()
+        page.get_by_label('GitLab MR URL', exact=True).fill('https://gitlab.example/watson/extra/-/merge_requests/82')
+        page.get_by_role('button', name='Add', exact=True).click()
+        page.locator('a[href="https://gitlab.example/watson/extra/-/merge_requests/82"]').wait_for()
+        assert page.locator('.linked-work-list a').count() == 2
+        assert_no_horizontal_overflow(page, 'removal controls at 390px')
+        print('Linked work verified: remove/restore, legacy link recovery, compact controls and Add MR', flush=True)
+    finally:
+        page.close()
+
+
 def run_browser_checks(ids: dict[str, int]) -> None:
     from playwright.sync_api import sync_playwright
 
@@ -514,7 +567,7 @@ def run_browser_checks(ids: dict[str, int]) -> None:
                 page.wait_for_selector(".person-lane-card", timeout=5000)
                 assert page.get_by_role(
                     "button", name="Open Review - Semantic rollout (Alex Chen)"
-                ).count() == 0, "review tracking stays out of the board"
+                ).count() == 1, "Home keeps one card for a grouped review"
                 assert page.locator(".work-card-state").count() == 0
                 assert "Historical completed sample" not in page.locator("body").inner_text()
                 assert page.locator(".schedule-strip").count() == 1, "Home should keep a compact schedule"
@@ -589,7 +642,7 @@ def run_browser_checks(ids: dict[str, int]) -> None:
                 clickup_url = "https://app.clickup.com/t/86d3sample"
                 clickup_link = page.locator(f'a[href="{clickup_url}"]')
                 assert clickup_link.count() == 1
-                assert clickup_link.inner_text().strip().startswith(clickup_url)
+                assert clickup_link.inner_text().strip().startswith('ClickUp task')
                 page.get_by_role("button", name="Back to Home").click()
                 page.wait_for_url(f"{BASE_URL}/")
 
@@ -639,6 +692,7 @@ def run_browser_checks(ids: dict[str, int]) -> None:
                 if width == 1440:
                     run_refresh_checks(page, ids)
                 page.close()
+            run_removal_checks(browser)
             run_onboarding_checks(browser)
         finally:
             browser.close()

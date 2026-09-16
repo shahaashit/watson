@@ -57,7 +57,8 @@ def search(q: str = "", conn=Depends(get_db)):
     # Local work — title and description are the durable board context.
     for r in conn.execute(
         "SELECT id, title, description, created_at FROM work_items "
-        "WHERE title LIKE ? OR description LIKE ? "
+        "WHERE (title LIKE ? OR description LIKE ?) "
+        "AND NOT EXISTS(SELECT 1 FROM work_removals r WHERE r.work_item_id=work_items.id AND r.restored_at IS NULL) "
         "ORDER BY updated_at DESC, id DESC LIMIT ?",
         (like, like, PER_KIND_LIMIT),
     ):
@@ -78,7 +79,7 @@ def search(q: str = "", conn=Depends(get_db)):
     for r in conn.execute(
         "SELECT wa.id, wa.work_item_id, wa.activity_type, wa.body, wa.created_at, wi.title "
         "FROM work_activity wa JOIN work_items wi ON wi.id=wa.work_item_id "
-        "WHERE wa.body LIKE ? ORDER BY wa.created_at DESC, wa.id DESC LIMIT ?",
+        "WHERE wa.body LIKE ? AND NOT EXISTS(SELECT 1 FROM work_removals r WHERE r.work_item_id=wi.id AND r.restored_at IS NULL) ORDER BY wa.created_at DESC, wa.id DESC LIMIT ?",
         (like, PER_KIND_LIMIT),
     ):
         out.append({

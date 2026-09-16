@@ -1,3 +1,12 @@
+export class ApiError extends Error {
+  constructor(message, status, detail) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.detail = detail
+  }
+}
+
 async function request(path, options = {}) {
   const resp = await fetch(path, {
     headers: { 'Content-Type': 'application/json' },
@@ -5,10 +14,12 @@ async function request(path, options = {}) {
   })
   if (!resp.ok) {
     let detail = resp.statusText
+    let apiDetail
     try {
-      detail = (await resp.json()).detail || detail
+      apiDetail = (await resp.json()).detail
+      detail = apiDetail || detail
     } catch { /* non-JSON error body */ }
-    throw new Error(detail)
+    throw new ApiError(detail, resp.status, typeof apiDetail === 'string' ? apiDetail : undefined)
   }
   return resp.json()
 }
@@ -60,11 +71,17 @@ export const api = {
     options,
   ),
   workDetail: (id, options = {}) => get(`/api/work-items/${id}`, options),
+  removedWork: (options = {}) => get('/api/work-items/removed', options),
+  removeWork: (id) => post(`/api/work-items/${encodeURIComponent(id)}/remove`),
+  restoreWork: (id) => post(`/api/work-items/${encodeURIComponent(id)}/restore`),
+  removeWorkLink: (id, linkId) => post(`/api/work-items/${encodeURIComponent(id)}/links/${encodeURIComponent(linkId)}/remove`),
+  restoreWorkLink: (id, linkId) => post(`/api/work-items/${encodeURIComponent(id)}/links/${encodeURIComponent(linkId)}/restore`),
   createWork: (work) => post('/api/work-items', work),
   updateWork: (id, changes) => patch(`/api/work-items/${id}`, changes),
   moveWork: (id, placement) => patch(`/api/work-items/${id}/position`, placement),
   addWorkActivity: (id, activity) => post(`/api/work-items/${id}/activity`, activity),
   addWorkLink: (id, link) => post(`/api/work-items/${id}/links`, link),
+  addGitlabMr: (id, url) => post(`/api/work-items/${encodeURIComponent(id)}/gitlab-mrs`, { url }),
   importWorkUrl: (url) => post('/api/work-import', { url }),
   workInbox: (options = {}) => get('/api/work-inbox', options),
   resolveInbox: (id, workItemId) => post(`/api/work-inbox/${id}/resolve`, { work_item_id: workItemId }),

@@ -8,7 +8,7 @@ import logging
 from rapidfuzz import fuzz
 
 from ..models import now_iso
-from . import events, gitlab_client
+from . import events, gitlab_client, work_suppression
 
 log = logging.getLogger("watson.link_proposer")
 
@@ -76,6 +76,8 @@ def propose_mr_task_links(conn) -> int:
 
     proposed = 0
     for mr in mrs:
+        if work_suppression.mr_removed(conn, mr['mr_id']):
+            continue
         title = (mr["title"] or "").strip()
         if not title:
             continue
@@ -123,6 +125,7 @@ def apply_link_approval(conn, payload: dict) -> dict:
     the managed task's additional_mr_ids. Idempotent."""
     mt_id = payload["managed_task_id"]
     mr_id = payload["related_mr_id"]
+    work_suppression.require_sources(conn, [mr_id])
     row = conn.execute(
         "SELECT additional_mr_ids FROM managed_tasks WHERE id = ?", (mt_id,)
     ).fetchone()

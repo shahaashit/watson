@@ -17,3 +17,35 @@
 .capture-to-work textarea, .activity-composer textarea, .activity-composer select { background: var(--surface-muted); }
 .activity-composer select { width: auto; }
 .activity-composer button, .capture-to-work button { background: var(--violet); border-color: var(--violet); color: #fff; }
+
+.work-removal-menu { position: relative; flex-shrink: 0; align-self: flex-start; }
+.work-removal-menu summary { cursor: pointer; list-style: none; padding: 3px 12px; border: 1px solid var(--border); border-radius: 8px; color: var(--text-dim); background: var(--surface); font-size: 1.4rem; }
+.work-removal-menu summary::-webkit-details-marker { display: none; }
+.work-removal-menu > div { position: absolute; z-index: 10; top: calc(100% + 6px); right: 0; width: max-content; padding: 6px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); box-shadow: var(--shadow-raised); }
+.work-removal-menu button, .work-removed-banner button, .linked-work-local-action, .local-removal-actions button { border: 1px solid var(--border); border-radius: 7px; padding: 7px 10px; font: inherit; font-size: .8rem; color: var(--text); background: var(--surface); cursor: pointer; }
+.work-removal-menu button, .local-removal-actions .local-removal-danger { color: var(--red); }
+.work-removal-menu button:disabled, .work-removed-banner button:disabled, .linked-work-local-action:disabled, .local-removal-actions button:disabled { opacity: .55; cursor: wait; }
+.work-removed-banner { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 16px; border: 1px solid #cdd2f3; border-radius: 12px; background: #f4f4ff; }
+.work-removed-banner strong { font-size: .95rem; }
+.work-removed-banner p { margin: 4px 0 0; color: var(--text-dim); font-size: .83rem; }
+.work-removed-banner button { flex-shrink: 0; color: var(--violet); }
+.linked-work-local-action { display: block; margin-top: 6px; font-size: .73rem; }
+.removed-mr-links { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); color: var(--text-dim); }
+.removed-mr-links h3 { margin: 0 0 9px; font-size: .8rem; }
+.removed-mr-links li { overflow-wrap: anywhere; font-size: .82rem; }
+.local-removal-dialog { width: min(440px, calc(100vw - 36px)); max-height: 85vh; overflow: auto; padding: 22px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--text); box-shadow: var(--shadow-raised); }
+.local-removal-dialog::backdrop { background: rgba(30, 41, 59, .3); }
+.local-removal-dialog h2 { margin: 0; font-size: 1.1rem; overflow-wrap: anywhere; }
+.local-removal-dialog p { color: var(--text-dim); font-size: .87rem; line-height: 1.5; }
+.local-removal-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.work-removal-menu :is(summary, button):focus-visible, .work-removed-banner button:focus-visible, .linked-work-local-action:focus-visible, .local-removal-dialog button:focus-visible { outline: 2px solid var(--violet); outline-offset: 3px; }
+@media (max-width: 800px) { .work-removal-menu > div { left: 0; right: auto; } }
+.linked-work-group-heading .linked-work-add-toggle { margin-left: auto; padding: 3px 7px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--violet); font: inherit; font-size: .73rem; cursor: pointer; }
+.linked-work-add-form { display: grid; gap: 7px; margin: 10px 0 12px; }
+.linked-work-add-form label { color: var(--text-dim); font-size: .76rem; }
+.linked-work-add-form input { min-width: 0; width: 100%; padding: 8px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); font: inherit; font-size: .8rem; }
+.linked-work-add-form > div { display: flex; flex-wrap: wrap; gap: 7px; }
+.linked-work-add-form button { padding: 5px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); font: inherit; font-size: .76rem; cursor: pointer; }
+.linked-work-add-form button[type="submit"] { background: var(--violet); border-color: var(--violet); color: #fff; }
+.linked-work-add-form :disabled, .linked-work-add-toggle:disabled { opacity: .55; cursor: wait; }
+.linked-work-add-form :is(input, button):focus-visible, .linked-work-add-toggle:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }

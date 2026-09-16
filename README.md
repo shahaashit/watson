@@ -53,6 +53,25 @@ hidden tab also refreshes these views. Drafts and filters stay intact; board
 refreshes wait until dragging and priority saves finish. Settings uses the same
 live connection status without resetting editable setup fields.
 
+## Removing and restoring work
+
+Use **Remove from Watson** in a work item's actions menu to hide it locally.
+The confirmation does not delete or close anything in ClickUp or GitLab. Notes,
+activity and source links are retained, and sync suppression prevents those
+linked sources from recreating the removed work.
+
+You can undo from the removed item's details or restore it under **Settings →
+Data & Backup → Removed work**. Restoring preserves its lifecycle: a previously
+completed item is not reopened just because it was restored.
+
+Use **Add MR** in Linked work to attach another GitLab merge request to the
+current work item. Paste its URL from your configured GitLab instance. An MR
+already attached elsewhere is not silently moved or duplicated. ClickUp links
+distinguish the original task from its review task, and repeated links to the
+same task are shown once. Previously unlinked MRs can still be restored from
+work details. Removal and restoration are recorded in the local activity log.
+There is no permanent-delete operation in this workflow.
+
 ## Install on macOS
 
 Requirements: macOS, Git, Python 3.10 or newer, and Node 18 or newer with npm.

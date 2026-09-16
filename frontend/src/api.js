@@ -1,9 +1,15 @@
 export class ApiError extends Error {
   constructor(message, status, detail) {
-    super(message)
+    const detailObject = detail && !Array.isArray(detail) && typeof detail === 'object'
+      && typeof detail.code === 'string' && /^[a-z_]{1,64}$/.test(detail.code)
+      && typeof detail.message === 'string' && detail.message.length <= 1000
+      ? Object.freeze({ code: detail.code, message: detail.message }) : undefined
+    super(detailObject?.message || (typeof message === 'string' ? message : 'Request failed.'))
     this.name = 'ApiError'
     this.status = status
-    this.detail = detail
+    this.detail = typeof detail === 'string' ? detail : undefined
+    this.detailObject = detailObject
+    this.code = detailObject?.code
   }
 }
 
@@ -19,7 +25,7 @@ async function request(path, options = {}) {
       apiDetail = (await resp.json()).detail
       detail = apiDetail || detail
     } catch { /* non-JSON error body */ }
-    throw new ApiError(detail, resp.status, typeof apiDetail === 'string' ? apiDetail : undefined)
+    throw new ApiError(detail, resp.status, apiDetail)
   }
   return resp.json()
 }
@@ -48,6 +54,8 @@ export const api = {
   bulkActions: (op, ids) => post('/api/actions/bulk', { op, ids }),
   editAction: (id, body) => patch(`/api/actions/${id}`, body),
   today: (options = {}) => get('/api/today', options),
+  meetLinkStatus: (options = {}) => get('/api/meet-links/status', options),
+  createMeetLink: (requestId) => post('/api/meet-links', { request_id: requestId }),
   meetingsForDate: (date) => get(`/api/meetings?date=${encodeURIComponent(date)}`),
   dismissFlockChannel: (channelJid) => del(`/api/flock/webhook/mentions?channel_jid=${encodeURIComponent(channelJid)}`),
   syncAll: () => post('/api/sync'),

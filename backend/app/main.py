@@ -23,6 +23,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 
 from . import db
+from .routers import meet_links
 from .config import settings
 from .routers import actions, ask, capture, clickup, entries, flock_webhook, gitlab, log as log_router, notes, reminders, review_automation, search, settings as settings_router, sync, today, work_import, work_inbox, work_items
 from .services import (
@@ -175,6 +176,7 @@ app.include_router(log_router.router)
 app.include_router(flock_webhook.router)
 app.include_router(notes.router)
 app.include_router(work_items.router)
+app.include_router(meet_links.router)
 app.include_router(work_import.router)
 app.include_router(work_inbox.router)
 app.include_router(settings_router.router)

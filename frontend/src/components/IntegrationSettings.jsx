@@ -9,7 +9,7 @@ const INTEGRATIONS = [
   { source: 'anthropic', title: 'AI provider', hint: 'Capture classification and Ask need an AI provider.', secret: 'api_key', secretLabel: 'API key', fields: [['base_url', 'Base URL'], ['model', 'Model']] },
   { source: 'gitlab', title: 'GitLab', hint: 'Watson collects merge-request context into its local cache.', secret: 'token', secretLabel: 'Access token', fields: [['base_url', 'Base URL'], ['username', 'Username (optional)']] },
   { source: 'clickup', title: 'ClickUp', hint: 'Exact branch task IDs enrich local work without broad task scans.', secret: 'token', secretLabel: 'API token', fields: [['create_list_id', 'Create-list ID']] },
-  { source: 'google-calendar', title: 'Google Calendar', hint: 'Calendar stays optional; local work is still available without it.', secret: 'client_config_json', secretLabel: 'OAuth client configuration JSON', fields: [] },
+  { source: 'google-calendar', title: 'Google', hint: 'Connect Google for Calendar. Meet nickname links work without this optional connection.', secret: 'client_config_json', secretLabel: 'OAuth client configuration JSON', fields: [] },
 ]
 
 const SOURCE_LABEL = { ...Object.fromEntries(INTEGRATIONS.map(({ source, title }) => [source, title])), 'review-automation': 'Review automation' }
@@ -122,23 +122,23 @@ function IntegrationCard({ definition, integration, onChanged }) {
         const status = await api.googleCalendarConnectStatus(oauth.sessionId)
         if (disposed) return
         if (status.status === 'connected') {
-          setMessage('Google Calendar connected.')
+          setMessage('Google connected.')
           setOauth(null); setBusy(''); onChanged?.()
           return
         }
         if (status.status === 'failed') {
-          setMessage('Google Calendar could not connect. Check the client configuration and try again.')
+          setMessage('Google could not connect. Check the client configuration and try again.')
           setOauth(null); setBusy('')
           return
         }
         if (Date.now() >= deadline) {
-          setMessage('Google Calendar is still waiting. You can finish the local authorization, then reconnect.')
+          setMessage('Google is still waiting. You can finish the local authorization, then reconnect.')
           setOauth(null); setBusy('')
           return
         }
         timerRef.current = window.setTimeout(poll, 1200)
       } catch {
-        if (!disposed) { setMessage('Could not check the Google Calendar connection. Try reconnecting.'); setOauth(null); setBusy('') }
+        if (!disposed) { setMessage('Could not check the Google connection. Try reconnecting.'); setOauth(null); setBusy('') }
       }
     }
     timerRef.current = window.setTimeout(poll, 800)
@@ -196,13 +196,20 @@ function IntegrationCard({ definition, integration, onChanged }) {
   </>
 
   return <article className="integration-settings-card" data-provider={source}>
-    <header><div><h3 aria-label={title}>{title}</h3><p>{hint}</p></div><span className={`integration-state ${integration?.configured ? 'configured' : ''}`}>{stateLabel(integration)}</span></header>
+    <header><div><h3 aria-label={title}>{title}</h3><p>{hint}</p></div><span className={`integration-state ${integration?.configured && integration.health?.status !== 'failed' ? 'configured' : ''}`}>{source === 'google-calendar' ? 'Calendar: ' : ''}{stateLabel(integration)}</span></header>
     {!aiProvider && <div className="oauth-connection-section">
     {source === 'gitlab' && integration?.oauth_available && <>
       <p>Application setup is ready for {integration.base_url}.</p>
       <GitLabConnect connected={integration.oauth_connected} onConnected={onChanged} />
     </>}
-    {source === 'google-calendar' && integration?.credential_present && <p>Application setup is ready. Use Connect Google to authorize your own account.</p>}
+    {source === 'google-calendar' && <>
+      <p><strong>Meet links are ready.</strong> Use New Meet beside your calendar to copy a short link for your organization. No Google connection is required.</p>
+      {integration?.credential_present && <p>{integration?.configured
+        ? integration.health?.status === 'failed'
+          ? 'Calendar needs attention. Test the connection or Reconnect Google to restore Calendar sync. Meet links are unaffected.'
+          : 'Your Google account is configured for Calendar sync. Reconnect only to renew access or change accounts.'
+        : 'Connect Google to show your calendar events in Watson. This is optional.'}</p>}
+    </>}
     {source === 'clickup' && integration?.oauth_available && <>
       <p>Connect your ClickUp account, then choose where Watson should create tasks.</p>
       <ClickUpConnect connected={integration.oauth_connected} onConnected={onChanged} />

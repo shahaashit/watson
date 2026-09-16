@@ -349,7 +349,7 @@ def test_google_oauth_thread_constructor_failures_release_capacity_and_redact(
         for error in failures
     )
     assert all(
-        str(error) == "Unable to start Google Calendar OAuth session."
+        str(error) == "Unable to start Google OAuth session."
         for error in failures
     )
     assert secret not in " ".join(str(error) for error in failures)
@@ -383,7 +383,7 @@ def test_google_oauth_thread_start_failure_is_removed_and_redacted(
 
     with pytest.raises(KeyError):
         oauth_sessions.status("failed-start-session")
-    assert str(error.value) == "Unable to start Google Calendar OAuth session."
+    assert str(error.value) == "Unable to start Google OAuth session."
     assert secret not in str(error.value)
     assert secret not in caplog.text
 
@@ -441,7 +441,7 @@ def test_google_oauth_failure_status_and_logs_are_redacted(monkeypatch, caplog):
     assert result == {
         "session_id": session_id,
         "status": "failed",
-        "error": "Google Calendar connection failed.",
+        "error": "Google connection failed.",
     }
     assert secret not in json.dumps(result)
     assert secret not in caplog.text
@@ -513,6 +513,7 @@ def test_google_oauth_flow_reads_client_config_and_writes_authorized_user(
 ):
     from app.auth import gcal
     from google_auth_oauthlib import flow as google_flow
+    from requests_oauthlib import OAuth2Session
 
     client_config = {
         "installed": {
@@ -525,10 +526,12 @@ def test_google_oauth_flow_reads_client_config_and_writes_authorized_user(
     calls = {}
 
     class Credentials:
+        granted_scopes = ['https://www.googleapis.com/auth/calendar.events']
         def to_json(self):
             return '{"refresh_token":"authorized-user-secret"}'
 
     class Flow:
+        oauth2session = OAuth2Session('synthetic')
         def run_local_server(self, **kwargs):
             calls["run_local_server"] = kwargs
             return Credentials()
@@ -548,16 +551,17 @@ def test_google_oauth_flow_reads_client_config_and_writes_authorized_user(
 
     assert calls["client_config"] == client_config
     assert calls["scopes"] == [
-        "https://www.googleapis.com/auth/calendar.events"
+        "https://www.googleapis.com/auth/calendar.events",
     ]
     assert calls["run_local_server"] == {
         "port": 0,
         "prompt": "consent",
         "open_browser": True,
     }
-    assert fake_keychain["google.authorized_user"] == (
-        '{"refresh_token":"authorized-user-secret"}'
-    )
+    assert json.loads(fake_keychain["google.authorized_user"]) == {
+        'refresh_token': 'authorized-user-secret',
+        'scopes': ['https://www.googleapis.com/auth/calendar.events'],
+    }
 
 
 def test_google_oauth_flow_errors_never_echo_client_config(

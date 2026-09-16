@@ -504,6 +504,60 @@ def run_removal_checks(browser) -> None:
         page.close()
 
 
+def run_meet_checks(browser) -> None:
+    """Mock the external-creation boundary; never create real Google meetings."""
+    page = browser.new_page(viewport={"width": 390, "height": 900})
+    requests = []
+    link = 'https://g.co/meet/w-7a3f-92bc-e614-08d2'
+    status = {'ready': True, 'reason': 'ready', 'message': ''}
+    page.route('**/api/meet-links/status', lambda route: route.fulfill(json=status))
+
+    def create(route):
+        requests.append(route.request.post_data_json)
+        route.fulfill(json={'url': link})
+
+    page.route('**/api/meet-links', create)
+    page.add_init_script("""window.meetCopies = []; window.blockMeetCopy = false;
+        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+            writeText: async text => {
+                if (window.blockMeetCopy) throw new Error('Clipboard denied');
+                window.meetCopies.push(text);
+            }
+        }});""")
+    try:
+        page.goto(f'{BASE_URL}/', wait_until='networkidle')
+        page.get_by_role('button', name='New Meet · Copy link', exact=True).click()
+        page.wait_for_function('window.meetCopies.length === 1')
+        assert page.evaluate('window.meetCopies[0]') == link
+        assert len(requests) == 1 and requests[0].get('request_id')
+        assert page.get_by_label('Meet link', exact=True).count() == 0
+        page.wait_for_function("document.querySelector('.meet-link-create').textContent === 'New Meet'")
+        page.reload(wait_until='networkidle')
+        assert page.get_by_label('Meet link', exact=True).count() == 0
+        page.evaluate('window.blockMeetCopy = true')
+        page.get_by_role('button', name='New Meet · Copy link', exact=True).click()
+        page.get_by_label('Meet link', exact=True).wait_for()
+        page.get_by_role('button', name='Copy link', exact=True).click()
+        assert page.get_by_label('Meet link', exact=True).input_value() == link
+        assert len(requests) == 2, 'Copy retry must never create another Meet space'
+        assert_no_horizontal_overflow(page, 'Meet actions at 390px')
+        page.get_by_role('button', name='Dismiss Meet link').click()
+        assert page.get_by_label('Meet link', exact=True).count() == 0
+        for width in (390, 1440):
+            page.set_viewport_size({'width': width, 'height': 900})
+            toolbar = page.locator('.schedule-toolbar').bounding_box()
+            assert toolbar['height'] < 60, 'Calendar header must stay compact'
+            assert_no_horizontal_overflow(page, f'Meet actions at {width}px')
+        page.screenshot(path='/tmp/watson-meet-compact.png', full_page=False)
+        status.update(ready=False, reason='reconnect_required', message='Reconnect Google to enable Meet links.')
+        page.reload(wait_until='networkidle')
+        assert page.get_by_role('button', name='New Meet · Copy link', exact=True).is_enabled()
+        assert len(requests) == 2, 'Loading or reconnection must not create meetings'
+        print('Meet verified: explicit nickname generation, copy, fallback, no OAuth requirement and mobile layout', flush=True)
+    finally:
+        page.close()
+
+
 def run_browser_checks(ids: dict[str, int]) -> None:
     from playwright.sync_api import sync_playwright
 
@@ -693,6 +747,7 @@ def run_browser_checks(ids: dict[str, int]) -> None:
                     run_refresh_checks(page, ids)
                 page.close()
             run_removal_checks(browser)
+            run_meet_checks(browser)
             run_onboarding_checks(browser)
         finally:
             browser.close()

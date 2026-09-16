@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import useDismissibleLayer from '../useDismissibleLayer.js'
 import { personalSchedule } from '../personalSchedule.js'
+import MeetLinkControl from './MeetLinkControl.jsx'
 import {
   cleanMeetingDescription,
   formatMeetingTimeRange,
@@ -94,7 +95,7 @@ export default function ScheduleStrip({ meetings = [], loading, error, personal 
       onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) { focusOpenedId.current = null; setActiveMeeting(null) } }}
       onPointerDown={(event) => { if (!event.target.closest?.('.schedule-event-trigger, .schedule-event-popover')) { focusOpenedId.current = null; setActiveMeeting(null) } }}
     >
-      <div className="schedule-heading"><h2>{personal ? 'My calendar' : 'Schedule'}</h2>{!personal && <span>Today</span>}</div>
+      <div className="schedule-toolbar"><div className="schedule-heading"><h2>{personal ? 'My calendar' : 'Schedule'}</h2>{!personal && <span>Today</span>}</div><MeetLinkControl /></div>
       {loading && <p className="schedule-status">Loading schedule…</p>}
       {error && <p className="schedule-status">Schedule is unavailable; your work lists are still up to date.</p>}
       {!loading && !error && (!visibleMeetings.length ? <p className="schedule-status">{personal ? 'No meetings today.' : 'No meetings on the calendar.'}</p> : (

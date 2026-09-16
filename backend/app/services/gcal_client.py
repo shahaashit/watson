@@ -25,11 +25,24 @@ log = logging.getLogger("watson.gcal")
 # user on the older calendar.readonly scope must re-run `python -m app.auth.gcal`
 # — Watson detects the scope mismatch at token load and logs a clear warning.
 SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
+MEET_SCOPE = "https://www.googleapis.com/auth/meetings.space.created"
+OAUTH_SCOPES = list(SCOPES)  # Nickname links don't require a Meet API grant.
 _MAX_CONNECTION_TIMEOUT_SECONDS = 20.0
 
 
 class GoogleCredentialError(RuntimeError):
     """Google credentials failed without exposing authorized-user material."""
+
+
+def credential_json(credentials, *, require_granted=False):
+    """Persist actual consent, not the OAuth library's requested-scope override."""
+    serialized = credentials.to_json()
+    granted = getattr(credentials, 'granted_scopes', None)
+    if granted is None and not require_granted:
+        return serialized
+    data = json.loads(serialized)
+    data['scopes'] = granted.split() if isinstance(granted, str) else list(granted or [])
+    return json.dumps(data)
 
 
 def gcal_config() -> dict:
@@ -92,9 +105,10 @@ def _load_credentials_unredacted(
     authorized_user_json = config["authorized_user"]
     if not authorized_user_json:
         return None
-    creds = Credentials.from_authorized_user_info(
-        json.loads(authorized_user_json), SCOPES
-    )
+    info = json.loads(authorized_user_json)
+    # Old records without scope metadata retain their Calendar-only behavior.
+    # Never pass the expanded OAuth request scopes into existing credentials.
+    creds = Credentials.from_authorized_user_info(info, None if 'scopes' in info else SCOPES)
     if creds and creds.expired and creds.refresh_token:
         refresh_request = Request()
         if timeout_seconds is None:
@@ -114,7 +128,8 @@ def _load_credentials_unredacted(
                 return refresh_request(*args, **kwargs)
 
             creds.refresh(bounded_refresh_request)
-        secret_store.set_secret("google.authorized_user", creds.to_json())
+        serialized = credential_json(creds)
+        secret_store.set_secret("google.authorized_user", serialized)
     return creds
 
 

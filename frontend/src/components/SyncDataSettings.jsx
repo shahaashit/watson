@@ -4,7 +4,7 @@ import { runFullSync, syncMonitor, useSyncStatus } from '../useSyncRefresh.js'
 import RemovedWorkSettings from './RemovedWorkSettings.jsx'
 
 function sourceName(source) {
-  return { anthropic: 'AI provider', gitlab: 'GitLab', clickup: 'ClickUp', 'google-calendar': 'Google Calendar' }[source] || source
+  return { anthropic: 'AI provider', gitlab: 'GitLab', clickup: 'ClickUp', 'google-calendar': 'Google' }[source] || source
 }
 
 function sourceState(source) {

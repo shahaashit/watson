@@ -4,7 +4,7 @@ import useDismissibleLayer from '../useDismissibleLayer.js'
 const HEALTH_LABELS = { healthy: 'Connected', degraded: 'Needs attention', disabled: 'Disabled', unconfigured: 'Not configured' }
 
 function sourceLabel(source) {
-  return { clickup: 'ClickUp', gitlab: 'GitLab', 'google-calendar': 'Google Calendar', 'review-automation': 'Review automation' }[source] || source
+  return { clickup: 'ClickUp', gitlab: 'GitLab', 'google-calendar': 'Google', 'review-automation': 'Review automation' }[source] || source
 }
 
 function reviewNeedsAttention(source) {

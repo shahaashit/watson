@@ -247,13 +247,38 @@ to the shared setup file.
 Follow Google's [Desktop OAuth setup guide](https://developers.google.com/workspace/calendar/api/quickstart/python):
 enable the Google Calendar API in your Google Cloud project, configure the
 consent screen (and test users if applicable), create an OAuth client of type
-**Desktop app**, and download its JSON. Paste the JSON into Watson's Google
-Calendar field and save it. Click **Connect Google** and complete authorization
+**Desktop app**, and download its JSON. Include that client configuration in the
+private Watson setup file and import it with the installer. Click **Connect Google** and complete authorization
 in the browser, then test the connection. You do not need to run Google's
 sample application or copy its code into Watson.
 
 Watson requests `calendar.events`, which allows reading and writing calendar
 events. Account or organization policy may require administrator approval.
+
+### One-click Google Meet links
+
+The calendar's **New Meet** button generates and copies a short, random
+same-organization nickname link, such as `https://g.co/meet/w-7a3f-92bc-e614-08d2`.
+The nickname is `w-` followed by four groups of four cryptographically random
+hexadecimal characters (64 random bits). No name, email, or company details are
+embedded. A fresh click gets a new nickname; retrying the same request returns
+the same link. Local collisions are checked, although names are not globally reserved.
+
+This is a nickname lookup, **not a meeting created in advance**. Participants
+must use accounts in the same Google Workspace organization; nickname support
+and meeting creation depend on Google's organization policies. Personal Gmail
+and cross-organization sharing are not supported by this shortcut. Google controls
+whether its account chooser appears. See [Google's nickname guidance](https://support.google.com/meet/answer/9303069).
+
+No Meet API enablement, extra OAuth scope, hosted redirect service, calendar event,
+or invitation is needed. Google OAuth remains optional for Calendar synchronization.
+Existing OAuth grants need not be changed, and old API-created links are retained
+when recovering an earlier request.
+
+Successful copies show a three-second confirmation, not a persistent URL field.
+If clipboard access is blocked, the link stays visible with Copy and Dismiss
+controls. Completed links are not restored after a page reload. Watson records
+link generation locally without logging the URL.
 Watson stores the client configuration and resulting authorization in Keychain;
 no OAuth JSON file needs to be placed in the repository.
 

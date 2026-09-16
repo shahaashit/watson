@@ -5,6 +5,15 @@ from pathlib import Path
 from .config import settings
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS meet_link_requests (
+  request_id TEXT PRIMARY KEY,
+  status TEXT NOT NULL CHECK(status IN ('in_progress','succeeded','uncertain','failed')),
+  url TEXT NULL,
+  error_code TEXT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS captures (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   raw_text TEXT NOT NULL,

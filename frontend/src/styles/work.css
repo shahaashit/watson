@@ -93,3 +93,20 @@
 .add-work-dialog-actions button:disabled { opacity: .5; cursor: not-allowed; }
 @keyframes modal-backdrop-in { from { opacity: 0; } }
 @keyframes add-work-dialog-in { from { opacity: 0; transform: translateY(-8px); } }
+.schedule-strip { grid-template-columns: minmax(0, 1fr); }
+.schedule-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; min-width: 0; }
+.schedule-toolbar .schedule-heading { padding-top: 0; flex-shrink: 0; }
+.meet-link-control { min-width: 0; max-width: 100%; flex: 0 1 auto; }
+.meet-link-actions { display: flex; gap: 10px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+.meet-link-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.meet-link-control button { border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); padding: 6px 9px; font: inherit; font-size: .77rem; cursor: pointer; }
+.meet-link-control .meet-link-create { color: var(--violet); }
+.meet-link-control button:disabled { opacity: .55; cursor: wait; }
+.meet-link-control a { color: var(--violet); font-size: .77rem; }
+.meet-link-note, .meet-link-error { margin: 5px 0 0; color: var(--text-dim); font-size: .72rem; line-height: 1.4; }
+.meet-link-error { color: var(--red); }
+.meet-link-result { display: flex; gap: 7px; margin-top: 8px; }
+.meet-link-result input { min-width: 0; flex: 1; width: 100%; padding: 7px 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); font: inherit; font-size: .75rem; }
+.meet-link-result button { flex-shrink: 0; }
+.meet-link-control :is(button, input, a):focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }
+@media (max-width: 520px) { .meet-link-result { flex-wrap: wrap; } .meet-link-result input { flex-basis: 100%; } }

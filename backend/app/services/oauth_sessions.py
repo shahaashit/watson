@@ -55,10 +55,10 @@ def _run_google(session_id: str) -> None:
         run_oauth_flow()
         final = {"status": "connected"}
     except Exception:
-        log.warning("Google Calendar OAuth session failed")
+        log.warning("Google OAuth session failed")
         final = {
             "status": "failed",
-            "error": "Google Calendar connection failed.",
+            "error": "Google connection failed.",
         }
 
     with _lock:
@@ -91,7 +91,7 @@ def start_google_calendar() -> str:
         with _lock:
             _sessions.pop(session_id, None)
         raise OAuthSessionStartError(
-            "Unable to start Google Calendar OAuth session."
+            "Unable to start Google OAuth session."
         ) from None
     return session_id
 
@@ -109,5 +109,5 @@ def status(session_id: str) -> dict:
             "status": record["status"],
         }
         if record["status"] == "failed":
-            result["error"] = "Google Calendar connection failed."
+            result["error"] = "Google connection failed."
         return result
